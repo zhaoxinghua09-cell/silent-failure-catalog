@@ -352,6 +352,10 @@ def check_required_files(store: Problems):
         ".github/ISSUE_TEMPLATE/config.yml",
         ".github/ISSUE_TEMPLATE/new-failure-mode.yml",
         ".github/ISSUE_TEMPLATE/false-positive.yml",
+        # The hook is a required artifact, not a convenience. If it goes missing,
+        # every gate becomes something a human has to remember to run — and the
+        # run where they forget is indistinguishable from the run where it passed.
+        ".githooks/pre-commit",
         "INTEGRITY.md", "manifest.sha256",
     ]
     for r in required:

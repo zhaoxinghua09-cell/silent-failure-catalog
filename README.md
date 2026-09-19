@@ -224,3 +224,5 @@ These are the only outbound and entry links in this README, by policy — the ru
 *Compiled from real incidents in AI-agent and CI toolchains. Entries are generalized; no proprietary or client material is reproduced.*
 
 </div>
+
+<!-- drift probe -->

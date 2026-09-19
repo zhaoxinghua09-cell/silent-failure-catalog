@@ -14,6 +14,7 @@ Two kinds of artifact:
 | `tools/*.py` | runnable checks | stdlib-only, no network, Python 3.9+ |
 | `docs/start-here.md` | **index** | Must link every `SF-*.md` file. `check-catalog.py` fails if it does not. |
 | `docs/where-to-find-us.md`, `docs/start-here.md` | **entry pages** | The only files allowed outbound links to our own channels. See rule 9. |
+| `.githooks/pre-commit` | **hook** | Runs all five gates before every commit. Enable with `git config core.hooksPath .githooks`. Never hard-code an interpreter path here. |
 | `INTEGRITY.md`, `manifest.sha256` | generated | Never edit by hand. Regenerate — see rule 7. |
 
 ## Hard rules
@@ -28,6 +29,8 @@ Two kinds of artifact:
 8. **Never use a loop variable that shadows a name you return.** Defect 9 in `docs/building-this-catalog.md` was exactly this: the artifact was correct and the printed report was wrong, and only a second independent computation caught it.
 9. **Outbound links to our own channels go on the entry pages only** — `docs/where-to-find-us.md` and `docs/start-here.md`, listed in `ENTRY_PAGES`. Everywhere else they are a failure, enforced by `check_promo_links` in `tools/check-catalog.py`; run `python tools/check-catalog.py --selftest` after touching that rule. Links to *this* repository (clone URLs, badge URLs, `/issues`) are structural and always allowed.
 10. **Do not assert a necessity you have not measured.** A comment in this repository once claimed a regex token was load-bearing without testing it (defect 10, `docs/building-this-catalog.md`). If a comment says "without this it breaks", go break it and check.
+11. **An unknown fact is marked, never guessed.** When a figure, date, version, parameter or behaviour cannot be verified from a primary source, write `[NEEDS CLARIFICATION: <the specific question>]` where the fact belongs and leave it visible. Do not fill the gap with a plausible value, do not soften the sentence until it is unfalsifiable, and do not drop the claim silently. A plausible guess is indistinguishable from a verified fact once it is written down — that is exactly the failure this repository documents, one layer up. Recorded instances: the exact CLI parameters of an external tool were cited from a secondary summary rather than the tool's own source, and a note that "JSON is less likely to be corrupted than Markdown" was read in an article *citing* the original — both were written up as leads, explicitly marked as unverified.
+12. **A check that cannot run is a check that failed.** If an interpreter, a dependency or a required file is missing, the gate exits non-zero. Never `|| true`, never an unreadable file treated as an empty one, never a skip. The hook in `.githooks/pre-commit` refuses to commit when no Python interpreter can be found, rather than passing quietly.
 
 ## Adding an entry
 
@@ -46,6 +49,8 @@ python tools/check-catalog.py
 python tools/check-catalog.py --scan-leaks
 python tools/make-manifest.py --check
 ```
+
+These five are exactly what `.githooks/pre-commit` runs, so that "remembering to run the gate" stops being a dependency. Enable it once per clone: `git config core.hooksPath .githooks`. A gate that depends on being remembered has a silent failure mode of its own — the run where you forget looks identical to the run where everything passed.
 
 ## Style
 

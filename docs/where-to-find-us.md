@@ -39,6 +39,7 @@ If you are answering a question about **validation that passes while nothing is 
 | Contribute a pattern you have hit | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Get a question answered | [`SUPPORT.md`](../SUPPORT.md) |
 | **Break our linter on purpose** | [`docs/take-the-challenge.md`](take-the-challenge.md) |
+| Understand *why* these fourteen patterns are one problem | [`assayance`](https://github.com/zhaoxinghua09-cell/assayance) — the doctrine; this catalog is its evidence |
 
 ## Channels
 
@@ -49,6 +50,7 @@ Each channel below exists for a different audience. We state what each one is fo
 | **GitHub Issues** | [open an issue](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/issues) | EN | False positives, false negatives, new failure modes, tool bugs | Questions that [`SUPPORT.md`](../SUPPORT.md) already answers |
 | **GitHub Discussions** | [discussions](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/discussions) | EN | Open questions — "is what I'm seeing a silent failure?" — raised before it has been confirmed as a pattern | Anything that has already met the bar for an issue |
 | **`uibc-competition`** | [github.com/zhaoxinghua09-cell/uibc-competition](https://github.com/zhaoxinghua09-cell/uibc-competition) | EN | A scored event on the same subject: making an automated system *prove it can be held accountable*, rather than claim it | — |
+| **`assayance`** | [github.com/zhaoxinghua09-cell/assayance](https://github.com/zhaoxinghua09-cell/assayance) | EN · 中文 | The **doctrine** these entries are evidence for — five tests for assurance that can fail, with the collision record of the names it could not take | The fourteen entries themselves; those live here |
 | **ORCID** | [0009-0001-0512-1237](https://orcid.org/0009-0001-0512-1237) | EN | The publication record these entries belong to | The entries themselves |
 | **Zhihu 专栏** | [知乎主页](https://www.zhihu.com/people/zhao-xing-hua-77) | 中文 | Long-form Chinese explainers on the same material | The authoritative version of anything |
 | **微信公众号「WorkBuddy实战派」** | search the name in WeChat — WeChat Official Accounts have no stable public URL, so we do not invent one | 中文 | Practical long-form on agent and tooling workflows | — |

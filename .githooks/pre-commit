@@ -1,0 +1,76 @@
+#!/bin/sh
+# The gates, moved in front of the commit.
+#
+# Why this exists: every check in this repository is a check that a human has to
+# remember to run. A check that depends on being remembered is a check with a
+# silent failure mode of its own — the run where you forget looks exactly like
+# the run where everything passed.
+#
+# Enable once per clone:
+#     git config core.hooksPath .githooks
+#
+# Design rules, each of which is a defect this repository has already recorded:
+#
+#   1. The interpreter is discovered, never hard-coded. A committed absolute
+#      path is a leak of the machine it was written on, and it breaks for
+#      everyone else.
+#   2. If no interpreter can be found, the hook FAILS. "I could not run the
+#      check" is not "the check passed". Set PYTHON to point at one explicitly.
+#   3. Nothing is swallowed. No `|| true`, no output redirection to /dev/null.
+#   4. A missing gate script is a failure, not a skip.
+
+set -u
+
+cd "$(dirname "$0")/.." || exit 1
+
+if [ -n "${PYTHON:-}" ]; then
+    py="$PYTHON"
+    if [ ! -x "$py" ] && ! command -v "$py" >/dev/null 2>&1; then
+        echo "pre-commit: PYTHON is set to '$py' but that is not executable." >&2
+        echo "pre-commit: refusing to commit — an unrunnable check is not a passed check." >&2
+        exit 1
+    fi
+else
+    py=""
+    for cand in python3 python; do
+        if command -v "$cand" >/dev/null 2>&1; then py="$cand"; break; fi
+    done
+    if [ -z "$py" ]; then
+        echo "pre-commit: no Python interpreter found (looked for python3, python)." >&2
+        echo "pre-commit: refusing to commit. Install Python, or set PYTHON=/path/to/python." >&2
+        exit 1
+    fi
+fi
+
+fail=0
+
+run() {
+    label="$1"; shift
+    script="$1"; shift
+    if [ ! -f "$script" ]; then
+        echo "pre-commit: FAIL — $script is missing. A gate that is not there is not a gate." >&2
+        fail=1
+        return
+    fi
+    if ! out=$("$py" "$script" "$@" 2>&1); then
+        echo "pre-commit: FAIL — $label" >&2
+        printf '%s\n' "$out" | sed 's/^/    /' >&2
+        fail=1
+    fi
+}
+
+run "gate-lint selftest"        tools/gate-lint.py     --selftest
+run "catalog selftest"          tools/check-catalog.py --selftest
+run "catalog consistency"       tools/check-catalog.py
+run "de-identification scan"    tools/check-catalog.py --scan-leaks
+run "content manifest"          tools/make-manifest.py --check
+
+if [ "$fail" -ne 0 ]; then
+    echo "" >&2
+    echo "pre-commit: commit blocked. Fix the above, or if the manifest is stale:" >&2
+    echo "            $py tools/make-manifest.py" >&2
+    exit 1
+fi
+
+echo "pre-commit: all gates passed."
+exit 0

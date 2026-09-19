@@ -7,6 +7,29 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
 ## [Unreleased]
 
+### Added
+
+- **`.githooks/pre-commit`** — the five gates, moved in front of the commit.
+  Enable with `git config core.hooksPath .githooks`. The hook discovers its
+  interpreter (never hard-codes a path) and **refuses to commit when it cannot
+  run**: an unrunnable check is not a passed check. It is a required file, so
+  `check-catalog.py` fails if it goes missing — otherwise every gate becomes
+  something a human has to remember, and the run where they forget is
+  indistinguishable from the run where it passed.
+- **AGENTS.md rule 11 — an unknown fact is marked, never guessed.** Use
+  `[NEEDS CLARIFICATION: <question>]` where the fact belongs. A plausible guess
+  is indistinguishable from a verified fact once it is written down.
+- **AGENTS.md rule 12 — a check that cannot run is a check that failed.**
+- Cross-reference from the entry page to **`assayance`**, the doctrine these
+  entries are evidence for. The two are kept separate on purpose: this
+  repository is the catalogue, that one is the doctrine, and neither is a copy
+  of the other.
+
+### Changed
+
+- `docs/where-to-find-us.md` gains an `assayance` row in both the human and the
+  channel tables.
+
 ## [0.1.0] — 2026-09-19
 
 Initial release.
