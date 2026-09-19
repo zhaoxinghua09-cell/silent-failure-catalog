@@ -10,7 +10,10 @@
 [![Content: CC BY 4.0](https://img.shields.io/badge/content-CC%20BY%204.0-lightgrey.svg)](LICENSE-CONTENT)
 [![Entries](https://img.shields.io/badge/entries-14-14B8A6)](failures/)
 [![Zero dependency](https://img.shields.io/badge/deps-stdlib%20only-0B1F3A)](#quick-start)
-[![Catalog validation](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/actions/workflows/validate.yml/badge.svg)](../../actions)
+<!-- CI badge withheld on purpose: a badge claiming a validation run that does not
+     exist would be exactly the silent pass this repo documents. The badge below
+     points at the check you can actually run, right now, locally. -->
+[![Catalog validation](https://img.shields.io/badge/validation-check--catalog%20--selftest-0B1F3A)](tools/check-catalog.py)
 
 [Start here](docs/start-here.md) · [Taxonomy](docs/taxonomy.md) · [Question Map](docs/question-map.md) · [Catalog index](failures/) · [Take the challenge](docs/take-the-challenge.md) · [Contributing](CONTRIBUTING.md)
 
