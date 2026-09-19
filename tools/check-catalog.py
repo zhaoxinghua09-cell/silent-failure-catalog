@@ -111,6 +111,11 @@ OWN_CHANNEL_PATTERNS = [
      re.compile(r"https?://[\w.-]*orcid\.org/", re.I)),
     ("a WeChat official-account URL",
      re.compile(r"https?://[\w.-]*weixin\.qq\.com/", re.I)),
+    # The one domain-branded string that must appear here rather than nowhere: this
+    # is the pattern that *blocks* it from the rest of the repository. Naming a
+    # thing in order to prohibit it is not an appearance of the thing — but it is
+    # the single permitted occurrence, and a `grep -ri medxpert` that returns more
+    # than this one line is a finding, not a nuisance.
     ("a domain-branded project site",
      re.compile(r"https?://[\w.-]*medxpert\.cn/", re.I)),
     ("a platform-hosted service endpoint",
