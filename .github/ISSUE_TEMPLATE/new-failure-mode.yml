@@ -1,0 +1,95 @@
+name: New failure mode
+description: Propose a new catalog entry — a check that passes while nothing is being checked
+title: "[entry] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you fill this in, read [`CONTRIBUTING.md`](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/CONTRIBUTING.md).
+
+        **An entry needs a reproduction and a negative control.** Prose about an incident is not an entry — it cannot be mechanically checked. Missing the negative control is the most common reason a proposal is declined, so if you are short on time, write that section first.
+
+        Also: this catalog is only about failures that **look like success**. If the thing you hit produced a crash, a traceback or a non-zero exit, it is an ordinary bug and out of scope.
+
+  - type: input
+    id: name
+    attributes:
+      label: A name for the pattern
+      description: One line. An unnamed phenomenon cannot be searched for, cited or fixed — naming comes first.
+      placeholder: "e.g. Neutral marker not counted"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: loudness
+    attributes:
+      label: Is the failure loud or silent?
+      description: The catalog only covers silent failures.
+      options:
+        - Silent — the system reports success, and nothing is checked
+        - Loud — it crashed, threw, or exited non-zero (out of scope, see CONTRIBUTING.md)
+    validations:
+      required: true
+
+  - type: textarea
+    id: symptom
+    attributes:
+      label: Symptom — what does the operator observe?
+      description: The exact observable state. Line numbers, exit codes and literal strings beat descriptions of them.
+      placeholder: |
+        The script prints "All checks passed" and exits 0, while the required field is absent.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: A runnable block, or explicitly marked `# illustrative`. Under ~20 lines if you can manage it.
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: control
+    attributes:
+      label: Negative control — the broken input that now fails
+      description: The fix is not "add a check". It is "add a check, and here is the input that makes it fail". Paste the command and its expected non-zero exit.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: fix
+    attributes:
+      label: The fix
+      description: The concrete change that converts the silent pass into a loud failure.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deidentified
+    attributes:
+      label: Have you generalized the incident?
+      description: Client, employer and vendor names; internal hostnames, URLs and ticket ids; absolute local paths; real account ids and tokens — all removed. See CONTRIBUTING.md § De-identification.
+      options:
+        - Yes — nothing identifiable remains, and I ran `python tools/check-catalog.py --scan-leaks`
+        - No — but the affected text is replaced with placeholders
+        - It comes from a public source, so there was nothing to strip
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: The failure is silent, not loud
+          required: true
+        - label: This is one failure mode, not two (if it were two, I am filing two issues)
+          required: true
+        - label: No vendor or standard-conformance claim is being made
+          required: true
+        - label: I understand this repository has no bug bounty and no response-time commitment
+          required: true

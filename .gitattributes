@@ -1,0 +1,15 @@
+# Byte-exact checkouts.
+#
+# This repository carries a content manifest (manifest.sha256 / INTEGRITY.md) whose
+# values are SHA-256 over the *bytes on disk*. Git's default end-of-line translation
+# rewrites files on checkout: a file committed with LF on Windows is checked out as
+# CRLF, the bytes differ, and every digest in the manifest becomes wrong — on one
+# platform only, which is the worst kind of wrong.
+#
+# `-text` disables all EOL translation, so the bytes in a checkout are the bytes that
+# were committed, on every platform. Git is then a byte transport, which is what a
+# manifest requires.
+#
+# If you add a genuine binary file, it is already covered: `-text` is the correct
+# setting for it too.
+* -text

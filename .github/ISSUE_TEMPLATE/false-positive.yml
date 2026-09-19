@@ -1,0 +1,80 @@
+name: Linter false positive or false negative
+description: gate-lint.py stayed silent on a real silent pass, or fired on code that is correct
+title: "[gate-lint] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Both directions are bugs here, and they weigh the same.
+
+        - **False negative** — the file contains a real silent pass and the linter says nothing.
+        - **False positive** — the file is genuinely correct and the linter fires.
+
+        A false positive is not a UX complaint. A linter that cries wolf gets switched off, and a switched-off linter is a silent pass with extra steps.
+
+        If you want the full version of this exercise — including what happens to your report — see [`docs/take-the-challenge.md`](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/docs/take-the-challenge.md) § Tier 2.
+
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Direction
+      options:
+        - False negative — it should have fired, and did not
+        - False positive — it fired, and should not have
+        - Other — a crash, a wrong message, or wrong severity
+    validations:
+      required: true
+
+  - type: input
+    id: rule
+    attributes:
+      label: Rule id, if the linter named one
+      placeholder: "e.g. SFL-005"
+    validations:
+      required: false
+
+  - type: textarea
+    id: sample
+    attributes:
+      label: The minimal file
+      description: Paste the whole file. It will be added to `tools/samples/bad/` or `tools/samples/good/` as a permanent regression fixture.
+      render: python
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Exact command and exact output
+      description: Copy and paste both, verbatim. Include the exit code.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead, and why
+      description: Point at the line of the file that should have been caught, or the reason the flagged code is correct.
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Python version, OS, and the commit hash you tested.
+      placeholder: "Python 3.12.4 · Ubuntu 24.04 · commit 1a2b3c4"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I ran `python tools/gate-lint.py --selftest` and the bundled samples all behaved
+          required: false
+        - label: I understand a false positive I report weighs the same as a false negative
+          required: true

@@ -1,0 +1,13 @@
+blank_issues_enabled: false
+contact_links:
+  - name: I have a question, or I am not sure this is a silent failure
+    url: https://github.com/zhaoxinghua09-cell/silent-failure-catalog/discussions
+    about: Ask before filing. Matching a symptom against the five families is usually faster than writing an issue.
+
+  - name: Read the answers we already have
+    url: https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/SUPPORT.md
+    about: Most questions here already have a written answer. If yours does, the fix belongs in the document, not in a thread.
+
+  - name: Find your symptom in the catalog
+    url: https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/docs/start-here.md
+    about: Symptom → entry, in one table. Check here before proposing a new pattern.

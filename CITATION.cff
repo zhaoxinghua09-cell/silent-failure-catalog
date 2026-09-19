@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this catalog, please cite it as below. Cite the specific entry and its `as of` date where possible."
+title: "Silent Failure Catalog: validation that passes while nothing is being checked"
+abstract: >-
+  A catalog of silent failure modes in CI gates, test suites, data pipelines and
+  AI-agent harnesses. Each entry names a failure pattern, gives a minimal
+  reproduction, a self-check and a fix that carries a negative control.
+  The shared root cause: the absence of evidence is recorded as evidence of
+  absence of a problem.
+type: dataset
+authors:
+  - family-names: "Zhao"
+    given-names: "Xinghua"
+    orcid: "https://orcid.org/0009-0001-0512-1237"
+keywords:
+  - silent failure
+  - false green
+  - verification gap
+  - CI gates
+  - validation
+  - test oracles
+  - negative controls
+  - mutation testing
+  - AI agents
+  - observability
+license: MIT
+repository-code: "https://github.com/zhaoxinghua09-cell/silent-failure-catalog"
+url: "https://github.com/zhaoxinghua09-cell/silent-failure-catalog"
+date-released: "2026-09-19"
+version: "0.1.0"

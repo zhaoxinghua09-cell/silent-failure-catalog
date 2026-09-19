@@ -1,0 +1,41 @@
+{
+  "title": "Silent Failure Catalog: validation that passes while nothing is being checked",
+  "upload_type": "dataset",
+  "description": "<p>A catalog of silent failure modes in CI gates, test suites, data pipelines and AI-agent harnesses. Each entry names a failure pattern, gives a minimal reproduction, a self-check and a fix that carries a negative control.</p><p>The shared root cause: <strong>the absence of evidence is recorded as evidence of absence of a problem.</strong> Two mechanical consequences follow — missing must enter the exit code, and no negative control means no evidence.</p><p>License is split: MIT for the code in <code>tools/</code>, CC BY 4.0 for the prose in <code>failures/</code> and <code>docs/</code>. No entry claims conformance with any standard, and the catalog is not affiliated with any vendor or standards body.</p>",
+  "creators": [
+    {
+      "name": "Zhao, Xinghua",
+      "affiliation": "Independent researcher",
+      "orcid": "0009-0001-0512-1237"
+    }
+  ],
+  "license": "other-open",
+  "access_right": "open",
+  "language": "eng",
+  "version": "0.1.0",
+  "keywords": [
+    "silent failure",
+    "false green",
+    "verification gap",
+    "CI gates",
+    "validation",
+    "test oracles",
+    "negative controls",
+    "mutation testing",
+    "AI agents",
+    "observability"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/zhaoxinghua09-cell/silent-failure-catalog",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    },
+    {
+      "identifier": "https://orcid.org/0009-0001-0512-1237",
+      "relation": "isCompiledBy",
+      "scheme": "url"
+    }
+  ],
+  "notes": "License split: MIT (code, tools/) and CC BY 4.0 (content, failures/ and docs/). The 'other-open' license code is used because Zenodo records a single license and this deposit is deliberately dual-licensed. Entries are append-only; a superseded entry stays online marked deprecated so that citations do not break."
+}
