@@ -5,6 +5,19 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
+## [Unreleased]
+
+### Added
+
+- **`index.md`** — a landing page for the documentation site, so that the repository's
+  `homepage` resolves to a page instead of a 404. The alternative was to leave the field
+  pointing at nothing, which is the shape this catalog documents. It is a landing page, not a
+  second source of truth: where it and `README.md` disagree, `README.md` is right.
+
+  It is listed here rather than under `0.1.0` because `v0.1.0` is a tag that already exists and
+  does not contain this file. A changelog entry naming a file as part of a release that does not
+  contain it is the same defect class as the rest of this file's history.
+
 ## [0.1.0] — 2026-09-29
 
 First release. The version number in `CITATION.cff` and in this file referred to no commit until
@@ -48,10 +61,6 @@ state, so they are one section here.
 - **Community files**: `SUPPORT.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`,
   `.github/PULL_REQUEST_TEMPLATE.md`, and three issue forms
   (`.github/ISSUE_TEMPLATE/` — new failure mode, linter false positive, contact links).
-- **`index.md`** — a landing page for the documentation site, so that the repository's
-  `homepage` resolves to a page instead of a 404. The alternative was to leave the field
-  pointing at nothing, which is the shape this catalog documents. It is a landing page, not a
-  second source of truth: where it and `README.md` disagree, `README.md` is right.
 - **`.zenodo.json`**, so a GitHub release can be archived to a DOI with the creator's ORCID
   attached, instead of the metadata having to be re-typed into a web form.
 - **`check_promo_links`** in `tools/check-catalog.py`: outbound links to our own channels are
