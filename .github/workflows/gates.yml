@@ -1,0 +1,110 @@
+name: gates
+
+# `.githooks/pre-commit` is the specification; this file is its echo.
+#
+# AGENTS.md rule 12 — "a check that cannot run is a check that failed" — is why the
+# hook refuses to commit when no interpreter can be found. But that hook protects one
+# machine, and only after `git config core.hooksPath .githooks` has been run on it.
+# The clone where nobody ran it looks exactly like the clone where everything passed,
+# which is the failure shape this catalog is about. This workflow is the copy that
+# runs when nobody remembered anything.
+#
+# The five gates below are the same five, in the same order, with the same meaning, as
+# the ones in `.githooks/pre-commit`. If one list changes, the other one is wrong.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: gates · python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the floor this repository claims ("stdlib-only, no network, Python
+        # 3.9+"). 3.12 is a contemporary interpreter. If the claim has drifted, this
+        # job is where the drift becomes visible rather than a sentence in a table.
+        python: ["3.9", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Interpreter under test
+        run: python -VV
+
+      # `if: always()` on every gate, so that a failure in one does not hide the state
+      # of the other four. The job is red if any gate failed, and the report is the
+      # complete list rather than the first casualty.
+      - name: 1/5 gate-lint --selftest
+        if: always()
+        run: python tools/gate-lint.py --selftest
+
+      - name: 2/5 check-catalog --selftest
+        if: always()
+        run: python tools/check-catalog.py --selftest
+
+      - name: 3/5 check-catalog (indexes, the six targets, link discipline)
+        if: always()
+        run: python tools/check-catalog.py
+
+      - name: 4/5 check-catalog --scan-leaks
+        if: always()
+        run: python tools/check-catalog.py --scan-leaks
+
+      - name: 5/5 make-manifest --check
+        if: always()
+        run: python tools/make-manifest.py --check
+
+  negative-control:
+    name: negative control · the manifest gate must be able to fail
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # README.md — "one byte is corrupted on purpose in CI and the verification is
+      # *required* to fail" — and CONTRIBUTING.md both promise this. It is what makes
+      # the job above mean anything: a `--check` that cannot fail would pass all five
+      # gates, and the badge would be a claim about a run that proves nothing.
+      #
+      # Three assertions. The third is the one usually left out, and it is the one
+      # that separates "this gate works" from "this gate is stuck red": a check that
+      # rejects everything is as useless as a check that rejects nothing, and only
+      # re-running it on the restored tree tells the two apart.
+      - name: A — the committed tree passes
+        run: python tools/make-manifest.py --check
+
+      - name: B — one byte appended is rejected
+        run: |
+          set -u
+          target="$(ls failures/SF-*.md | head -1)"
+          cp "$target" "${RUNNER_TEMP}/pristine.md"
+          printf 'X' >> "$target"
+          echo "appended one byte to ${target}"
+          if python tools/make-manifest.py --check; then
+            echo "::error::--check exited 0 after ${target} was altered by one byte; the manifest gate cannot see drift"
+            exit 1
+          fi
+          echo "rejected, as required"
+
+      - name: C — the restored tree passes again
+        run: |
+          set -u
+          target="$(ls failures/SF-*.md | head -1)"
+          cp "${RUNNER_TEMP}/pristine.md" "$target"
+          python tools/make-manifest.py --check
+          echo "accepted again — the gate is not simply always red"

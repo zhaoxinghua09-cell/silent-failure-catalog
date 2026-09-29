@@ -13,7 +13,7 @@
   引用时请同时标注仓库名、原文链接 `https://github.com/zhaoxinghua09-cell/silent-failure-catalog`
   与权利人「赵兴华 / Steven Zhao·China」。
 - **完整条款**：代码见 [LICENSE](LICENSE)（MIT）；内容见 [LICENSE-CONTENT](LICENSE-CONTENT)（**保留所有权利**，注明出处可引用）。
-- **联系**：zhaoxinghua09@gmail.com ｜ ORCID 0009-0001-0512-1237
+- **联系**：zhaoxinghua09@gmail.com ｜ ORCID 0009-0001-0512-1237 <!-- leak-scan: allow — the maintainer's published contact address; deliberate, not a leak -->
 - **品牌状态限定**：MedXpert、SynomosAI、LGD 等为相关项目标识，
   **均未申请实体注册、未申请商标注册**；出现仅作来源标识，
   不构成对法人实体或商标权的任何主张。
@@ -30,9 +30,11 @@
 [![Content: All Rights Reserved](https://img.shields.io/badge/content-All%20Rights%20Reserved-lightgrey.svg)](LICENSE-CONTENT)
 [![Entries](https://img.shields.io/badge/entries-14-14B8A6)](failures/)
 [![Zero dependency](https://img.shields.io/badge/deps-stdlib%20only-0B1F3A)](#quick-start)
-<!-- CI badge withheld on purpose: a badge claiming a validation run that does not
-     exist would be exactly the silent pass this repo documents. The badge below
-     points at the check you can actually run, right now, locally. -->
+<!-- The gate runs in CI now, so the badge below can point at a run that exists.
+     It was withheld until it did: a badge claiming a validation run that does not
+     exist would be exactly the silent pass this repo documents. The second badge
+     still points at the check you can run yourself, right now, locally. -->
+[![gates](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/actions/workflows/gates.yml/badge.svg)](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/actions/workflows/gates.yml)
 [![Catalog validation](https://img.shields.io/badge/validation-check--catalog%20--selftest-0B1F3A)](tools/check-catalog.py)
 
 [Start here](docs/start-here.md) · [Taxonomy](docs/taxonomy.md) · [Question Map](docs/question-map.md) · [Catalog index](failures/) · [Take the challenge](docs/take-the-challenge.md) · [Contributing](CONTRIBUTING.md)

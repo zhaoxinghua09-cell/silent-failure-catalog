@@ -15,6 +15,7 @@ Two kinds of artifact:
 | `docs/start-here.md` | **index** | Must link every `SF-*.md` file. `check-catalog.py` fails if it does not. |
 | `docs/where-to-find-us.md`, `docs/start-here.md` | **entry pages** | The only files allowed outbound links to our own channels. See rule 9. |
 | `.githooks/pre-commit` | **hook** | Runs all five gates before every commit. Enable with `git config core.hooksPath .githooks`. Never hard-code an interpreter path here. |
+| `.github/workflows/gates.yml` | **CI** | The same five gates, plus the negative control, on every push and pull request. `.githooks/pre-commit` is the specification; this is its echo — change one list and the other is wrong. |
 | `INTEGRITY.md`, `manifest.sha256` | generated | Never edit by hand. Regenerate — see rule 7. |
 
 ## Hard rules
@@ -50,7 +51,7 @@ python tools/check-catalog.py --scan-leaks
 python tools/make-manifest.py --check
 ```
 
-These five are exactly what `.githooks/pre-commit` runs, so that "remembering to run the gate" stops being a dependency. Enable it once per clone: `git config core.hooksPath .githooks`. A gate that depends on being remembered has a silent failure mode of its own — the run where you forget looks identical to the run where everything passed.
+These five are exactly what `.githooks/pre-commit` runs — and what `.github/workflows/gates.yml` runs on every push and pull request, in a container where nobody had to remember anything. Enable the hook once per clone: `git config core.hooksPath .githooks`. A gate that depends on being remembered has a silent failure mode of its own — the run where you forget looks identical to the run where everything passed.
 
 ## Style
 

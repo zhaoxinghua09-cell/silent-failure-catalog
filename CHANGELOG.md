@@ -21,6 +21,16 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
 ### Added
 
+- **`.github/workflows/gates.yml`** — the five gates run in CI, on every push and
+  pull request, on Python 3.9 (the floor this repository claims) and 3.12.
+  `README.md` said "CI enforces this" and `CONTRIBUTING.md` said "will fail CI",
+  and no workflow existed: a statement that a check is watching, with nothing
+  watching. `.githooks/pre-commit` remains the specification and the workflow is
+  its echo. It also carries the negative control both files promised — one byte
+  is appended to an entry and `make-manifest.py --check` is *required* to fail,
+  then the tree is restored and *required* to pass again. The second half is the
+  half usually left out: a gate that cannot fail and a gate that is stuck red
+  look identical from the outside, and only the restored run tells them apart.
 - **`.githooks/pre-commit`** — the five gates, moved in front of the commit.
   Enable with `git config core.hooksPath .githooks`. The hook discovers its
   interpreter (never hard-codes a path) and **refuses to commit when it cannot
@@ -36,6 +46,15 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
   entries are evidence for. The two are kept separate on purpose: this
   repository is the catalogue, that one is the doctrine, and neither is a copy
   of the other.
+
+### Fixed
+
+- **`README.md`'s contact line tripped `--scan-leaks`.** The address is an
+  address-shaped string and the scan is right to flag that shape. It was found by
+  the first CI run, which is the point of having one: the change that added the
+  licence notice reported that the gates had passed, and the gate that had not
+  been run was the one that fires. The line now carries `<!-- leak-scan: allow -->`,
+  so the allowance is counted and printed rather than silent.
 
 ### Changed
 
