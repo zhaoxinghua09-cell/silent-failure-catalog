@@ -1,28 +1,46 @@
-# Content License — CC BY 4.0
+# Content License — All Rights Reserved
 
-The prose content of this repository — `README.md`, `llms.txt`, `failures/**/*.md`,
-`docs/**/*.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `AGENTS.md` — is licensed under the
-**Creative Commons Attribution 4.0 International License (CC BY 4.0)**.
+**The prose content of this repository is all rights reserved.** It is *not* released
+under a public copyright licence, and it is **not** CC BY 4.0.
 
-Copyright (c) 2026 SynomosAI
+> **Note on an earlier revision.** Up to commit `82018d3c` this file described the content
+> as *CC BY 4.0*. That description contradicted the rights notice at the top of `README.md`
+> and the intent of this project, and it is withdrawn. A licence, once granted, is not
+> revoked: copies obtained while the earlier description was in place remain governed by it.
+> This file governs copies obtained from now on.
 
-You are free to:
+## What this file covers
 
-- **Share** — copy and redistribute the material in any medium or format
-- **Adapt** — remix, transform, and build upon the material for any purpose, even commercially
+`README.md`, `llms.txt`, `SUPPORT.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`,
+`CONTRIBUTING.md`, `CHANGELOG.md`, `AGENTS.md`, `failures/**/*.md`, `docs/**/*.md`.
 
-Under the following terms:
+Code in `tools/`, `.githooks/` and `.github/` is licensed under **MIT** — see `LICENSE`.
 
-- **Attribution** — You must give appropriate credit, provide a link to the license, and
-  indicate if changes were made. You may do so in any reasonable manner, but not in any way
-  that suggests the licensor endorses you or your use.
-  - Recommended attribution for an entry:
-    `Silent Failure Catalog, <entry-id> "<entry title>", SynomosAI, <as-of date>, CC BY 4.0`
+Copyright (c) 2026 Xinghua Zhao (赵兴华 / Steven Zhao·China). All rights reserved.
 
-- **No additional restrictions** — You may not apply legal terms or technological measures
-  that legally restrict others from doing anything the license permits.
+## What you may do without asking
 
-Full license text: https://creativecommons.org/licenses/by/4.0/legalcode
+- **Cite** — quote a short passage, an entry identifier, an entry title or a table, in
+  academic, journalistic, evaluative or public-discussion work, **with attribution**.
+- **Link** — link to this repository, or to any file in it, from anywhere.
+- **Run and apply** — run the code in `tools/` under the terms of `LICENSE` (MIT), and
+  apply the checks and recipes described here to your own systems.
+
+## What requires written permission
+
+- Republishing the catalogue, in whole or in substantial part, in any medium;
+- Translating, adapting, abridging, or producing any derivative work;
+- Bundling the content into a product, a paid service, a course, a dataset, or a
+  machine-learning training corpus;
+- Removing or altering the attribution or rights notices.
+
+Requests go to the contact line below. A request that serves the project's purpose — a
+course, a translation, a standards submission — is normally granted; asking first is the
+whole cost.
+
+## Attribution, when you cite
+
+    Silent Failure Catalog, <entry-id> "<entry title>", Xinghua Zhao (Steven Zhao·China), <as-of date>. All rights reserved.
 
 ---
 
@@ -30,4 +48,4 @@ Full license text: https://creativecommons.org/licenses/by/4.0/legalcode
 When you cite an entry, cite the entry id, the title, and the `as of` date. A fix can regress;
 an undated citation becomes a false claim over time.
 
-Code in `tools/` and `.github/` is licensed under MIT — see `LICENSE`.
+**Contact.** zhaoxinghua09@gmail.com ｜ ORCID `0009-0001-0512-1237`

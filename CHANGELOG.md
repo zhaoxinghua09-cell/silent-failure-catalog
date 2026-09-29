@@ -7,6 +7,18 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
 ## [Unreleased]
 
+### Changed
+
+- **Licence notice made consistent: the prose content is all rights reserved.**
+  `LICENSE-CONTENT` described the content as CC BY 4.0 while the rights notice at the
+  top of `README.md` reserved all rights. A file whose two ends disagree about its own
+  licence is the same shape as the failures this catalog documents, so the badges, the
+  page footer, `CITATION.cff`, `.zenodo.json`, `SUPPORT.md`, `docs/where-to-find-us.md`,
+  `docs/question-map.md` and `llms.txt` now say what the notice says. Code stays MIT,
+  and citation with attribution stays permitted. **A licence already granted for copies
+  obtained earlier is not affected** — a licence is not revoked; this governs copies
+  obtained from here on.
+
 ### Added
 
 - **`.githooks/pre-commit`** — the five gates, moved in front of the commit.

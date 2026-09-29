@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use this catalog, please cite it as below. Cite the specific entry and its `as of` date where possible."
+message: "If you use this catalog, please cite it as below. Cite the specific entry and its `as of` date where possible. Code in tools/ is MIT; the prose content is all rights reserved, with citation under attribution permitted — see LICENSE and LICENSE-CONTENT."
 title: "Silent Failure Catalog: validation that passes while nothing is being checked"
 abstract: >-
   A catalog of silent failure modes in CI gates, test suites, data pipelines and
@@ -23,7 +23,10 @@ keywords:
   - mutation testing
   - AI agents
   - observability
-license: MIT
+# No single SPDX identifier describes this deposit: the code is MIT (see LICENSE)
+# and the prose content is all rights reserved (see LICENSE-CONTENT). The field is
+# left out rather than naming one of the two, which would overstate permission for
+# the other.
 repository-code: "https://github.com/zhaoxinghua09-cell/silent-failure-catalog"
 url: "https://github.com/zhaoxinghua09-cell/silent-failure-catalog"
 date-released: "2026-09-19"

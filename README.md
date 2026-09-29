@@ -3,15 +3,16 @@
 # Silent Failure Catalog
 ## 许可说明 · License Notice
 
-> **本仓库使用自定义许可，不是 MIT / Apache-2.0**。平台显示为 `Other`（NOASSERTION），
-> 属识别算法的正常结果，**不代表本仓库处于无许可状态**。
+> **本仓库使用自定义的「分层」许可：代码 MIT、内容保留所有权利**——不是整仓 MIT 或
+> Apache-2.0。平台显示为 `Other`（NOASSERTION），属识别算法的正常结果，
+> **不代表本仓库处于无许可状态**。
 
 - **权利状态**：全部内容保留所有权利（All Rights Reserved）。未经书面许可，
   不得复制、改编、再分发、公开传播或用于衍生作品。
 - **可否引用**：可以。允许在**注明出处**的前提下引用与学术、公共讨论；
   引用时请同时标注仓库名、原文链接 `https://github.com/zhaoxinghua09-cell/silent-failure-catalog`
   与权利人「赵兴华 / Steven Zhao·China」。
-- **完整条款**：见仓库根目录 [LICENSE](LICENSE)。
+- **完整条款**：代码见 [LICENSE](LICENSE)（MIT）；内容见 [LICENSE-CONTENT](LICENSE-CONTENT)（**保留所有权利**，注明出处可引用）。
 - **联系**：zhaoxinghua09@gmail.com ｜ ORCID 0009-0001-0512-1237
 - **品牌状态限定**：MedXpert、SynomosAI、LGD 等为相关项目标识，
   **均未申请实体注册、未申请商标注册**；出现仅作来源标识，
@@ -26,7 +27,7 @@
 *Silent failure modes in CI gates, test suites, data pipelines and AI-agent harnesses — with detection recipes.*
 
 [![License: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE)
-[![Content: CC BY 4.0](https://img.shields.io/badge/content-CC%20BY%204.0-lightgrey.svg)](LICENSE-CONTENT)
+[![Content: All Rights Reserved](https://img.shields.io/badge/content-All%20Rights%20Reserved-lightgrey.svg)](LICENSE-CONTENT)
 [![Entries](https://img.shields.io/badge/entries-14-14B8A6)](failures/)
 [![Zero dependency](https://img.shields.io/badge/deps-stdlib%20only-0B1F3A)](#quick-start)
 <!-- CI badge withheld on purpose: a badge claiming a validation run that does not
@@ -235,13 +236,13 @@ These are the only outbound and entry links in this README, by policy — the ru
 
 **怎么贡献最有用**：不要点赞，**开一个 issue 说出你撞见的那类静默失败**——它决定下一条写什么。
 
-许可：代码 MIT ｜ 内容 CC BY 4.0
+许可：代码 MIT ｜ 内容保留所有权利（注明出处可引用）
 
 ---
 
 <div align="center">
 
-**© 2026 SynomosAI** · Code [MIT](LICENSE) · Content [CC BY 4.0](LICENSE-CONTENT)
+**© 2026 赵兴华 / Steven Zhao·China** · Code [MIT](LICENSE) · Content [All Rights Reserved](LICENSE-CONTENT)
 
 *Compiled from real incidents in AI-agent and CI toolchains. Entries are generalized; no proprietary or client material is reproduced.*
 

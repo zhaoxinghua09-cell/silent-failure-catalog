@@ -12,7 +12,7 @@ Most questions here already have a written answer. In order of how often they co
 | "How do I run the linter on my own script?" | [`README.md`](README.md) § Quick start |
 | "The linter fired on code I believe is correct." | [`docs/take-the-challenge.md`](docs/take-the-challenge.md) § Tier 2 — a false positive is a bug here, and this is how to report it |
 | "Will you accept my incident write-up?" | [`CONTRIBUTING.md`](CONTRIBUTING.md) — an entry needs a reproduction and a negative control |
-| "Can I quote this / translate this / put it in a course?" | [`LICENSE-CONTENT`](LICENSE-CONTENT) — CC BY 4.0; attribution required, permission not |
+| "Can I quote this / translate this / put it in a course?" | [`LICENSE-CONTENT`](LICENSE-CONTENT) — quoting with attribution: yes. Translating or republishing: ask first — the content is all rights reserved |
 | "Is this compliant with <standard>?" | No, and nothing here claims to be. [`README.md`](README.md) § Scope and non-goals |
 
 If the answer is in there, an issue asking for it will be closed with a link. That is not rudeness — it is the same rule this catalog applies to checks: a question with a written answer is not a support load, it is a **documentation defect**, and the fix belongs in the document.

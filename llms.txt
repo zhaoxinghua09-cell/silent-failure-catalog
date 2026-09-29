@@ -2,7 +2,7 @@
 
 > A catalog of validation that passes while nothing is being checked — silent failure modes in CI gates, test suites, data pipelines and AI-agent harnesses, each with a minimal reproduction, a self-check and a fix that carries a negative control. Fourteen entries across five families; one file per failure mode.
 
-Maintainer: Zhao, Xinghua (SynomosAI). License: MIT (code) / CC BY 4.0 (content).
+Maintainer: Zhao, Xinghua (SynomosAI). License: MIT (code) / all rights reserved (content) — citation with attribution permitted.
 Last updated: 2026-09-19. Cite entries with their `as of` date.
 
 ## Start here

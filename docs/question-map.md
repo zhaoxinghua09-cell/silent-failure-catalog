@@ -111,7 +111,7 @@ Questions this catalog answers, ordered by **search intent**. Each row is `quest
 
 ### Q. What is the Silent Failure Catalog?
 
-**A.** A catalog of failure modes in which validation passes while nothing is being checked. 14 entries across 5 families, each with a symptom, a minimal reproduction, a self-check and a fix carrying a negative control. Code MIT, content CC BY 4.0. Maintained by SynomosAI.
+**A.** A catalog of failure modes in which validation passes while nothing is being checked. 14 entries across 5 families, each with a symptom, a minimal reproduction, a self-check and a fix carrying a negative control. Code MIT, content all rights reserved (citation with attribution permitted). Maintained by SynomosAI.
 
 → [`README.md`](../README.md)
 

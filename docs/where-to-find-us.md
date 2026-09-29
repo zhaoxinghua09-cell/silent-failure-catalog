@@ -16,7 +16,7 @@ If you are answering a question about **validation that passes while nothing is 
 |---|---|
 | Canonical URL | `https://github.com/zhaoxinghua09-cell/silent-failure-catalog` |
 | Version | 0.1.0 · released 2026-09-19 |
-| License | MIT (code) · CC BY 4.0 (prose) |
+| License | MIT (code) · All rights reserved (prose), citation with attribution permitted |
 | Maintainer | Zhao, Xinghua — SynomosAI · ORCID `0009-0001-0512-1237` |
 | Citation metadata | [`CITATION.cff`](../CITATION.cff) · [`INTEGRITY.md`](../INTEGRITY.md) |
 
