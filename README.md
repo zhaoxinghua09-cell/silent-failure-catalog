@@ -12,7 +12,7 @@
   引用时请同时标注仓库名、原文链接 `https://github.com/zhaoxinghua09-cell/silent-failure-catalog`
   与权利人「赵兴华 / Steven Zhao·China」。
 - **完整条款**：见仓库根目录 [LICENSE](LICENSE)。
-- **联系**：zhaoxinghua06@126.com ｜ ORCID 0009-0001-0512-1237
+- **联系**：zhaoxinghua09@gmail.com ｜ ORCID 0009-0001-0512-1237
 - **品牌状态限定**：MedXpert、SynomosAI、LGD 等为相关项目标识，
   **均未申请实体注册、未申请商标注册**；出现仅作来源标识，
   不构成对法人实体或商标权的任何主张。
