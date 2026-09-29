@@ -1,6 +1,6 @@
 # Building this catalog
 
-**as of 2026-09-19**
+**as of 2026-09-29**
 
 A catalog about checks that pass while nothing is verified has an obvious obligation: **it must not be one.** This page records the defects found in this repository's own tooling while building it, and how each was found.
 
@@ -134,11 +134,37 @@ The comment described a defect that never existed, in a file whose subject is cl
 
 Note what the fix is *not*. It is not a change to the code — the code was already correct. It is a change to **a statement about the code**. Defect 9 was a tool that printed a wrong number beside a correct file; this one is a tool that documented a wrong reason beside correct logic. The class is the same, and it is the one this catalog keeps rediscovering: **a description is a claim, and a claim nobody tested is not evidence.**
 
+### 11. A safeguard described in five places and implemented in none
+
+`README.md` withheld a CI badge on purpose. The comment said a badge claiming a validation run
+that does not exist "would be exactly the silent pass this repo documents", and pointed instead at
+a check a reader could run locally right now. The reasoning was sound; the conclusion was wrong.
+The honest alternative to a false badge is a workflow, not a note about a workflow.
+
+Eleven lines below that comment, the same file said **"CI enforces this"**. `CONTRIBUTING.md`
+promised that a pull request adding an entry without updating all six index files "will fail CI",
+and that the manifest "has a **negative control in CI**". `AGENTS.md` rule 7 said "CI runs
+`--check` and will fail otherwise".
+
+`.github/workflows/` did not exist. There was no CI. Five statements across three files, in a
+repository whose entire subject is *a check believed to be running, and not running*.
+
+**Found by:** writing `.github/workflows/gates.yml` and pushing it. No amount of reading finds a
+run that never happened: an absent run emits nothing, and nothing in the repository distinguishes
+it from a run that passed. Its first execution also failed a gate that a local run had reported as
+passing — the same family one level up, in a person's checklist rather than in a tool, which is why
+it is recorded in `CHANGELOG.md` and not below.
+
+**Fixed by:** adding the workflow — the five gates from `.githooks/pre-commit`, in the same order
+and with the same meaning, on Python 3.9 and 3.12, plus both negative controls — and repointing the
+badge at it. The claim was not deleted; it was made true. A claim deleted is a claim nobody has to
+check; a claim satisfied is one that now fails loudly on the day it stops being satisfied.
+
 ---
 
 ## What this page is for
 
-Not self-flagellation — **evidence for the general claim.** All ten defects are of the class the catalog documents, and none of them were found by reading the code. They were found by:
+Not self-flagellation — **evidence for the general claim.** All eleven defects are of the class the catalog documents, and none of them were found by reading the code. They were found by:
 
 - running each rule against an input that must make it fail,
 - mutating the repository's state and asserting a non-zero exit,
@@ -153,7 +179,7 @@ If you take one thing from this repository, take the method rather than any sing
 
 And two corollaries that cost ten rounds of review here:
 
-> **A documented safeguard is not an implemented one.** Four of the ten defects above involved prose that described behaviour the code did not have — including one that described a *defect* the code did not have.
+> **A documented safeguard is not an implemented one.** Five of the eleven defects above involved prose that described behaviour the code did not have — including one that described a *defect* the code did not have.
 
 > **A passing run and a correct report are two different things.** Defect 9 wrote a correct file and printed a wrong number. If a value is reported anywhere — stdout, a badge, a summary, a comment — it needs its own route to verification, because it will be read as the truth even when the artifact beside it is right.
 
