@@ -153,3 +153,21 @@ state, so they are one section here.
   [`docs/building-this-catalog.md`](docs/building-this-catalog.md) because a
   catalogue about silent passes that was itself silently passing would be worth
   nothing.
+
+## Unreleased (2026-10-01)
+
+### Added
+
+- **`examples/S5-Qregister/`** -- executable crosswalk of the UC-21 scenario gate
+  register (Annex S5 sections 7-10, Q0-Q6) to the four-case negative-control
+  matrix of `examples/T08-S5Q2/`. Three implementation profiles (I0 ordinary /
+  I1 defended / I2 complete) produce per-gate traces over four fixture
+  branches (continuity, supersession, act-window, ambiguity); the I0 and I1
+  traces reproduce the published capability-absent and ineffective-control
+  diagnostics. Four gate-layer mutants (supersession drop, cache read,
+  binding drop, blanket deny) are each killed on exactly their crosswalk
+  branches. Spec/code agreement is asserted at startup from
+  `fixture_spec.json`. Model result, not an AWS product execution; product
+  anchors verified against AWS documentation (Step Functions input snapshot,
+  StopExecution, DynamoDB conditional writes) are recorded in the example
+  README.
