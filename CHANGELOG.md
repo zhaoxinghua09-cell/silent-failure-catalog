@@ -18,6 +18,8 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
   does not contain this file. A changelog entry naming a file as part of a release that does not
   contain it is the same defect class as the rest of this file's history.
 
+- **`REVIEW.md`** — the review log for this catalog: what was reviewed, the review mechanisms, the release-pipeline defect the review surfaced (and the gate that now prevents its return), and an honest positioning against MedXpertQA on the verifier-side axis. Added on `main` after `v0.1.0`; the canonical citation remains the immutable tag `v0.1.0`.
+
 ## [0.1.0] — 2026-09-29
 
 First release. The version number in `CITATION.cff` and in this file referred to no commit until
