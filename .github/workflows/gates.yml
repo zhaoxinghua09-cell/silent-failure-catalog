@@ -67,6 +67,10 @@ jobs:
         if: always()
         run: python tools/make-manifest.py --check
 
+      - name: 6/5 release-consistency (canonical pin self-consistent)
+        if: always()
+        run: python tools/verify_release_consistency.py --repo-path . --ref v0.1.0
+
   negative-control:
     name: negative control · the manifest gate must be able to fail
     runs-on: ubuntu-latest
