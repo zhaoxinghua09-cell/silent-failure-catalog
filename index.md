@@ -26,7 +26,7 @@ python tools/check-catalog.py           # internal consistency
 python tools/gate-lint.py --selftest    # the linter against its own samples
 ```
 
-The same five gates run in CI on every push, on Python 3.9 and 3.12, including both negative
+The same seven gates run in CI on every push, on Python 3.9 and 3.12, including both negative
 controls.
 
 ## Why this file exists
