@@ -45,6 +45,10 @@
 
 ---
 
+> **Submitted to ITU FG-TIDA.** This catalog is the verifier-side challenge reference discussed in themes **#6** (*Verifier-side requirements and failure semantics*) and **#7**, submitted as **`FG-TIDA/use-cases#23`** and cited in those threads as the executable form of "a check that ran and could not fail" (SF-011) and the `checks-in-path` field (C7). Canonical pin: release **v0.1.0** at commit `82018d3c`, set digest `7449337e…`. The full clickable trail is on the profile README (`zhaoxinghua09-cell`).
+
+---
+
 > **If this saved you a debugging session, open an issue naming the pattern you hit.** That is what decides which failure mode gets written next — a star does not, and we do not trade, buy or reward them. If you would rather attack the tooling itself, [start here](docs/take-the-challenge.md).
 >
 > If you found this through one of our other projects, [`docs/start-here.md`](docs/start-here.md) maps a symptom to the entry that answers it, and [`docs/where-to-find-us.md`](docs/where-to-find-us.md) is the one page that carries all of our channels.
