@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""T08-S5Q2 stateful simulation v3 -- four contrasting cases, auditable spec.
+"""T08-S5Q2 stateful simulation v4 -- four contrasting cases, auditable spec,
+and a mutation suite that answers "who tests the tester".
 
 A runnable companion to the FG-TIDA contribution (use-cases #21, Annex T08 /
 UC-21, requirement S5-Q2): "Material preconditions are reassessed at use, not
@@ -39,6 +40,16 @@ Case history
       from ``fixture_spec.json``, and the simulation fails loudly at startup if
       code and spec diverge -- reference completeness becomes an *auditable*
       artifact instead of an assumption carried silently.
+  v4  adversarial pass (the review continued against ourselves): the selftest
+      asserted that the *shipped* validators discriminate, but nothing
+      asserted that the selftest itself would catch a *broken* validator.
+      Mutation testing closes that loop: four programmatic mutants of the
+      after-implementation (skip the coverage diff / read the stale snapshot /
+      skip the action-boundary re-check / invert every verdict) are executed
+      against the cases, and the selftest fails unless every mutant is
+      *killed* -- i.e., observable behavior deviates from the shipped table
+      on at least one case. The selftest also now asserts the FAIL
+      diagnostics *name the offending condition*, not merely any failure.
 
 Each case runs two implementations on the identical world trace:
 
@@ -62,11 +73,13 @@ Usage
 -----
   python simulation.py                    # selftest (default): all four cases
                                           # on both implementations, asserts
-                                          # the discriminating properties
+                                          # the discriminating properties AND
+                                          # that every mutant is killed
   python simulation.py --case A-omitted   # paired traces for one case
   python simulation.py --case B-temporal
   python simulation.py --case C-clean
   python simulation.py --case D-actwindow
+  python simulation.py --mutants          # print the mutation kill matrix
 
 Deterministic: no randomness, no clock, no network. stdlib only, Python 3.9+.
 """
@@ -109,6 +122,33 @@ QUEUED, PREFLIGHT, EXECUTED, BLOCKED = "QUEUED", "PREFLIGHT", "EXECUTED", "BLOCK
 EXIT_PASS = 0
 EXIT_FAIL = 2
 
+# --------------------------------------------------------------------------- #
+# Mutation suite: programmatic mutants of the after-implementation. Each
+# mutant disables exactly one defense; the selftest requires that every
+# mutant is *killed* (its observable behavior deviates from the shipped
+# table below on at least one case). The expected table is hardcoded, not
+# derived by running the shipped code -- deriving it from a run would make
+# the assertion tautological.
+# --------------------------------------------------------------------------- #
+MUTANTS = {
+    "M1-no-coverage-diff":
+        "after-impl skips the SF-006 coverage diff (undeclared conditions unchecked)",
+    "M2-stale-read":
+        "after-impl reads the queue-time snapshot instead of use-time state",
+    "M3-no-boundary-recheck":
+        "after-impl trusts the verdict and skips the action-boundary re-check",
+    "M4-polarity-flip":
+        "after-impl inverts every verdict (permitting treated as prohibiting)",
+}
+
+# Shipped after-implementation behavior: case -> (exit, repair_applied).
+SHIPPED_AFTER = {
+    "A-omitted": (EXIT_FAIL, False),
+    "B-temporal": (EXIT_FAIL, False),
+    "C-clean": (EXIT_PASS, True),
+    "D-actwindow": (EXIT_FAIL, False),
+}
+
 
 def check_spec_agreement():
     """Fail loudly if the in-code reference and fixture_spec.json diverge.
@@ -138,8 +178,8 @@ def check_spec_agreement():
                                              sorted(code_conds)))
 
 
-def _run_case(case: str, impl: str):
-    """Run one case on one implementation.
+def _run_case(case: str, impl: str, mutant: str | None = None):
+    """Run one case on one implementation, optionally under a mutant.
 
     Returns (exit_code, lines, repair_applied). ``repair_applied`` tracks the
     target state so the prevention claim is observable, not implied.
@@ -179,18 +219,23 @@ def _run_case(case: str, impl: str):
         say(PREFLIGHT, "verdict: PASS (all declared conditions held *at queue time*)")
     else:
         # Step 1: coverage diff against the spec-derived reference.
-        undeclared = sorted(set(REFERENCE) - set(declared))
-        if undeclared:
-            say(PREFLIGHT, "verdict: FAIL -- coverage gap: %s exist in the "
-                "reference but are undeclared (SF-006)" % undeclared)
-            say(BLOCKED, "disposition: blocked at the gate -> target state "
-                "UNCHANGED (prevention demonstrated, Q6 trace)")
-            return EXIT_FAIL, lines, repair_applied
+        # (M1 disables it: undeclared conditions go unchecked -- SF-006.)
+        if mutant != "M1-no-coverage-diff":
+            undeclared = sorted(set(REFERENCE) - set(declared))
+            if undeclared:
+                say(PREFLIGHT, "verdict: FAIL -- coverage gap: %s exist in the "
+                    "reference but are undeclared (SF-006)" % undeclared)
+                say(BLOCKED, "disposition: blocked at the gate -> target state "
+                    "UNCHANGED (prevention demonstrated, Q6 trace)")
+                return EXIT_FAIL, lines, repair_applied
         # Step 2: evaluate declared conditions against state read AT USE TIME.
+        # (M2 reverts the source to the queue-time snapshot -- the defect the
+        # requirement forbids.)
+        read_source = snapshot if mutant == "M2-stale-read" else world
         say(PREFLIGHT,
             "after-impl: coverage complete (%d/%d); re-reading state at use time"
             % (len(declared), len(REFERENCE)))
-        failed = [p for p in declared if not world.get(p)]
+        failed = [p for p in declared if not read_source.get(p)]
         if failed:
             say(PREFLIGHT, "verdict: FAIL -- declared condition(s) %s changed "
                 "between queue and use (S5-Q2 breach: verdict inherited from "
@@ -209,9 +254,10 @@ def _run_case(case: str, impl: str):
 
     # -- t3: the attempted action. The after implementation re-verifies at the
     # action boundary (atomic check-then-act); the before implementation acts
-    # on the inherited verdict.
+    # on the inherited verdict. (M3 disables the re-verification.)
     say(PREFLIGHT, "attempted action: apply repair to target")
-    if impl == "after" and post_event is not None:
+    if impl == "after" and post_event is not None \
+            and mutant != "M3-no-boundary-recheck":
         failed_now = [p for p in declared if not world.get(p)]
         if failed_now:
             say(BLOCKED, "disposition: BLOCKED at the action boundary -- "
@@ -229,9 +275,43 @@ def _run_case(case: str, impl: str):
     return EXIT_PASS, lines, repair_applied
 
 
+def _run_case_polarity(case: str, impl: str, mutant: str | None = None):
+    """Wrapper applying the M4 polarity-flip mutant (verdict inversion)."""
+    code, lines, applied = _run_case(case, impl, mutant)
+    if mutant == "M4-polarity-flip" and impl == "after":
+        code = EXIT_FAIL if code == EXIT_PASS else EXIT_PASS
+    return code, lines, applied
+
+
 def _paired(case: str):
     """Run both implementations on one case; return (before, after) triples."""
-    return _run_case(case, "before"), _run_case(case, "after")
+    return _run_case_polarity(case, "before"), _run_case_polarity(case, "after")
+
+
+def _kill_matrix():
+    """Run every mutant over every case; return {mutant: [killing cases]}.
+
+    A mutant is *killed* by a case when the observable pair
+    (exit code, repair_applied) deviates from the hardcoded shipped table.
+    """
+    matrix = {}
+    for name in MUTANTS:
+        killers = []
+        for case in sorted(CASES):
+            code, _lines, applied = _run_case_polarity(case, "after", mutant=name)
+            if (code, applied) != SHIPPED_AFTER[case]:
+                killers.append(case)
+        matrix[name] = killers
+    return matrix
+
+
+def _print_matrix(matrix) -> None:
+    print("mutation matrix (who tests the tester):")
+    for name, killers in matrix.items():
+        if killers:
+            print("  %-23s KILLED by %s" % (name, ", ".join(killers)))
+        else:
+            print("  %-23s SURVIVED -- a broken validator would pass silently" % name)
 
 
 def _print_paired(case: str) -> int:
@@ -241,41 +321,52 @@ def _print_paired(case: str) -> int:
     print("\n".join(bl))
     print("-- after-impl (exit %d):" % ac)
     print("\n".join(al))
+    print("\n(exit semantics: 1 = the pair discriminates, i.e. the demo held; "
+          "0 would mean both validators agreed -- the silent shape.)")
     return 0 if (bc == 0 and ac == 0) or (bc != 0 and ac != 0) else 1
 
 
 def _selftest() -> int:
-    """Assert the discriminating properties across all four cases.
+    """Assert the discriminating properties AND the mutation kill matrix.
 
     A catalog about silent passes must not silently pass (SF-011 discipline,
     see ../../failures/SF-011-always-green-oracle.md). The properties:
-      A: before PASSes the omitted-condition world; after FAILs on coverage.
+      A: before PASSes the omitted-condition world; after FAILs on coverage,
+         naming the undeclared condition.
       B: before PASSes the value-drift world (stale snapshot) AND the repair
-         is applied during an active freeze; after FAILs at use time AND the
-         target state is unchanged (prevention).
+         is applied during an active freeze; after FAILs at use time, naming
+         the flipped condition, AND the target state is unchanged.
       C: both PASS and the legitimate repair is applied (over-blocking
          detector).
       D: both PASS the pre-flight; the world then flips post-verdict; before
          executes during the fresh breach (verdict alone is not a control),
-         after blocks at the action boundary (target unchanged).
+         after blocks at the action boundary, naming the flipped condition.
+      M: every mutant of the after-implementation is killed by at least one
+         case (who-tests-the-tester, mechanically).
     """
     problems = []
 
     (bc, bl, b_applied), (ac, al, a_applied) = _paired("A-omitted")
+    a_after_text = " ".join(al)
     if bc != EXIT_PASS or "PASS" not in " ".join(bl):
         problems.append("A: before-impl must silently PASS the omitted-condition world")
-    if ac != EXIT_FAIL or "coverage gap" not in " ".join(al):
+    if ac != EXIT_FAIL or "coverage gap" not in a_after_text:
         problems.append("A: after-impl must FAIL naming the coverage gap")
+    if "no_applicable_freeze" not in a_after_text:
+        problems.append("A: after-impl diagnostics must name the omitted condition")
     if not b_applied:
         problems.append("A: before-impl must realize the breach (repair applied)")
 
     (bc, bl, b_applied), (ac, al, a_applied) = _paired("B-temporal")
+    b_after_text = " ".join(al)
     if bc != EXIT_PASS:
         problems.append("B: before-impl must PASS the value-drift world (stale snapshot)")
     if not b_applied:
         problems.append("B: before-impl must apply the repair during the active freeze")
-    if ac != EXIT_FAIL or "changed between queue and use" not in " ".join(al):
+    if ac != EXIT_FAIL or "changed between queue and use" not in b_after_text:
         problems.append("B: after-impl must FAIL on the use-time value change")
+    if "no_applicable_freeze" not in b_after_text:
+        problems.append("B: after-impl diagnostics must name the flipped condition")
     if a_applied:
         problems.append("B: after-impl must BLOCK the repair (target unchanged)")
 
@@ -295,44 +386,62 @@ def _selftest() -> int:
                         "(check-then-act gap demonstrated)")
     if ac != EXIT_FAIL or "action boundary" not in d_after_text:
         problems.append("D: after-impl must block at the action boundary")
+    if "no_applicable_freeze" not in d_after_text:
+        problems.append("D: after-impl diagnostics must name the post-verdict flip")
     if a_applied:
         problems.append("D: after-impl must leave the target unchanged")
 
-    print("T08-S5Q2 selftest v3 (four contrasting cases)")
-    print("-" * 46)
+    matrix = _kill_matrix()
+    survivors = [m for m, killers in matrix.items() if not killers]
+    if survivors:
+        problems.append("mutation: surviving mutant(s) %s -- the selftest "
+                        "cannot see a broken validator" % survivors)
+
+    print("T08-S5Q2 selftest v4 (four contrasting cases + mutation suite)")
+    print("-" * 62)
     ok = "ok" if not problems else "FAILED"
     print("  A-omitted  : before=PASS(silent)   after=FAIL(coverage gap)      -> %s" % ok)
     print("  B-temporal : before=PASS(stale)    after=FAIL(use-time read)     -> %s" % ok)
     print("  C-clean    : before=PASS           after=PASS (both execute)     -> %s" % ok)
     print("  D-actwindow: before=PASS(breach!)  after=BLOCK(boundary re-check)-> %s" % ok)
+    print()
+    _print_matrix(matrix)
     if problems:
         print()
         for p in problems:
             print("  FAIL %s" % p)
-        print("\nSELFTEST FAILED: the cases no longer discriminate.")
+        print("\nSELFTEST FAILED: the cases or the mutation matrix no longer hold.")
         return 1
     print("\nSELFTEST PASSED: set-difference catches omissions; the use-time "
           "read catches value drift; the boundary re-check catches "
           "post-verdict drift; prevention is shown as "
-          "attempt->disposition->target-state, not implied.")
+          "attempt->disposition->target-state; and every mutant of the "
+          "validator is killed -- the tester itself is tested.")
     return 0
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="simulation",
-        description="Stateful simulation of an always-green pre-flight, v3: "
+        description="Stateful simulation of an always-green pre-flight, v4: "
                     "four contrasting cases (UC-21 S5-Q2 / T08-AWS, SF-006 + "
                     "SF-011), spec-derived reference, action-boundary "
-                    "re-verification.",
+                    "re-verification, and a mutation suite that kills four "
+                    "broken-validator mutants.",
     )
     parser.add_argument("--case", choices=sorted(CASES),
                         help="run both implementations on one case and print the paired traces")
+    parser.add_argument("--mutants", action="store_true",
+                        help="run the mutation suite and print the kill matrix")
     parser.add_argument("--selftest", action="store_true",
-                        help="run all cases and assert they discriminate (default)")
+                        help="run all cases and mutants and assert they discriminate (default)")
     args = parser.parse_args(argv)
 
     check_spec_agreement()
+    if args.mutants:
+        matrix = _kill_matrix()
+        _print_matrix(matrix)
+        return 0 if all(matrix.values()) else 1
     if args.case:
         return _print_paired(args.case)
     return _selftest()
