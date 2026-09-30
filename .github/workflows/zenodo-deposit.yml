@@ -1,0 +1,31 @@
+name: Zenodo Deposit
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  deposit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Package source tree
+        run: git archive --format=tar.gz -o sfc_v0.1.0.tar.gz HEAD
+
+      - name: Create & publish deposition
+        env:
+          ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+        run: |
+          cat > meta.json <<'EOF'
+          {"metadata":{"title":"Silent Failure Catalog","upload_type":"software","creators":[{"name":"Zhao, Xinghua","orcid":"0009-0001-0512-1237","affiliation":"MedXpert (unregistered name)"}],"description":"A curated catalogue of silent-failure cases and negative controls for AI-agent evaluation. A negative control is a standard experimental-design technique where the right answer is known in advance, so a panel that agrees on a wrong answer is caught rather than scored as consensus. Targets shared systematic error across evaluators. Code under MIT; catalogue content all rights reserved.","access_right":"open","license":"other-open","version":"0.1.0","publication_date":"2026-09-30","keywords":["silent failure","AI evaluation","negative control","agent identity","shared systematic error"],"related_identifiers":[{"identifier":"https://github.com/zhaoxinghua09-cell/silent-failure-catalog","relation":"isSupplementTo","resource_type":"software"}]}}
+          EOF
+          DEP=$(curl -sS -H "Authorization: Bearer $ZENODO_TOKEN" -H "Content-Type: application/json" -X POST --data @meta.json "https://zenodo.org/api/deposit/depositions")
+          DEP_ID=$(echo "$DEP" | python3 -c 'import sys,json;print(json.load(sys.stdin)["id"])')
+          BUCKET=$(echo "$DEP" | python3 -c 'import sys,json;print(json.load(sys.stdin)["links"]["bucket"])')
+          curl -sS -H "Authorization: Bearer $ZENODO_TOKEN" -X PUT --data-binary @sfc_v0.1.0.tar.gz "$BUCKET/sfc_v0.1.0.tar.gz"
+          PUB=$(curl -sS -H "Authorization: Bearer $ZENODO_TOKEN" -X POST "https://zenodo.org/api/deposit/depositions/$DEP_ID/actions/publish")
+          echo "DOI=$(echo "$PUB" | python3 -c 'import sys,json;print(json.load(sys.stdin)["doi"])')"
+          echo "CONCEPTDOI=$(echo "$PUB" | python3 -c 'import sys,json;print(json.load(sys.stdin)["conceptdoi"])')"
