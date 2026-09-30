@@ -51,7 +51,7 @@ jobs:
           echo "Deposition id: $DEP_ID  bucket: $BUCKET"
 
           echo "=== Step 3: upload file ==="
-          UP_RESP=$(curl -sS -w "\n__HTTP_%{http_code}__" -H "Authorization: Bearer $ZENODO_TOKEN" -X PUT --data-binary @sfc_v0.1.0.tar.gz "$BUCKET/sfc_v0.1.0.tar.gz")
+          UP_RESP=$(curl -sS -w "\n__HTTP_%{http_code}__" -H "Authorization: Bearer $ZENODO_TOKEN" -H "Content-Type: application/octet-stream" -X PUT --data-binary @sfc_v0.1.0.tar.gz "$BUCKET/sfc_v0.1.0.tar.gz")
           echo "UPLOAD HTTP status: $(echo "$UP_RESP" | grep -o '__HTTP_[0-9]*__' | grep -o '[0-9]*')"
 
           echo "=== Step 4: publish ==="
@@ -68,3 +68,6 @@ jobs:
             echo "::error::Publish failed (HTTP $PUB_CODE)"
             exit 1
           fi
+
+          echo "=== Step 5: cleanup orphan draft 23051590 (failed run 36670131545) ==="
+          curl -sS -o /dev/null -w "DISCARD HTTP %{http_code}\n" -H "Authorization: Bearer $ZENODO_TOKEN" -X POST "https://zenodo.org/api/deposit/depositions/23051590/actions/discard" || true
