@@ -14,8 +14,8 @@ Two kinds of artifact:
 | `tools/*.py` | runnable checks | stdlib-only, no network, Python 3.9+ |
 | `docs/start-here.md` | **index** | Must link every `SF-*.md` file. `check-catalog.py` fails if it does not. |
 | `docs/where-to-find-us.md`, `docs/start-here.md` | **entry pages** | The only files allowed outbound links to our own channels. See rule 9. |
-| `.githooks/pre-commit` | **hook** | Runs all five gates before every commit. Enable with `git config core.hooksPath .githooks`. Never hard-code an interpreter path here. |
-| `.github/workflows/gates.yml` | **CI** | The same five gates, plus the negative control, on every push and pull request. `.githooks/pre-commit` is the specification; this is its echo — change one list and the other is wrong. |
+| `.githooks/pre-commit` | **hook** | Runs all seven gates before every commit. Enable with `git config core.hooksPath .githooks`. Never hard-code an interpreter path here. |
+| `.github/workflows/gates.yml` | **CI** | The same seven gates, plus the negative control, on every push and pull request. `.githooks/pre-commit` is the specification; this is its echo — change one list and the other is wrong. |
 | `INTEGRITY.md`, `manifest.sha256` | generated | Never edit by hand. Regenerate — see rule 7. |
 
 ## Hard rules
