@@ -61,7 +61,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys# --------------------------------------------------------------------------- #
+import sys
+
+# --------------------------------------------------------------------------- #
 # Fixture branches (frozen per Annex S5 section 7). Keys: superseded_by_patch_b
 # (Q4), freeze_applied (the material precondition), source_available (Q3
 # freshness qualifier), post_verdict_freeze (the case-D / Q6 event).
@@ -130,6 +132,9 @@ def _trace_gates_i1(branch: str, world: dict, mutant: str | None = None):
         lines.append(("Q3", CONTROL_EXECUTED_FAILED,
                       "live source unavailable; 5-minute cache promoted to "
                       "current fact (stale state accepted as current)"))
+        lines.append(("Q4", CONTROL_EXECUTED_FAILED,
+                      "superseding-patch lineage not assessed (basis read "
+                      "from the stale cache)"))
         lines.append(("Q5", "bypassed",
                       "no bounded-ambiguity path: silent permission on UNKNOWN"))
         return EXIT_PASS, True, lines, "patch EXECUTED on stale evidence"
@@ -152,7 +157,10 @@ def _trace_gates_i1(branch: str, world: dict, mutant: str | None = None):
         lines.append(("Q6", "absent",
                       "no check-to-act binding; fresh post-verdict breach "
                       "undetected"))
-    return EXIT_PASS, True, lines, "patch EXECUTED during the breach"
+    note = ("patch EXECUTED during the breach" if branch != "continuity" else
+            "patch executed; outcome correct here, for the wrong reason "
+            "(stale evidence, partial basis)")
+    return EXIT_PASS, True, lines, note
 
 
 def _trace_gates_i2(branch: str, world: dict, mutant: str | None = None):
@@ -205,6 +213,10 @@ def _trace_gates_i2(branch: str, world: dict, mutant: str | None = None):
         lines.append(("Q5", CONTROL_EXECUTED_PASS,
                       "affected patch requalified; unchanged units unaffected"))
         return EXIT_FAIL, False, lines, "REASSESS -> affected patch blocked"
+    # No supersession: the gate still leaves evidence (a vacuous pass is a
+    # recorded pass, not a missing line -- seven gates, seven traces).
+    lines.append(("Q4", CONTROL_EXECUTED_PASS,
+                  "no superseding state transition found"))
     if mutant == "G4-blanket-deny":
         return EXIT_FAIL, False, lines + [
             ("Q5", CONTROL_EXECUTED_FAILED,
@@ -237,6 +249,9 @@ def check_spec_agreement():
 
     Same discipline as examples/T08-S5Q2: the reference is an auditable
     artifact, and the spec/code agreement itself must not silently pass.
+    The branch fields AND the correct_outcome verdicts are both guarded --
+    the outcome field is the register's ruling, so it is checked against
+    the hardcoded shipped table, not left to drift.
     """
     spec_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                              "fixture_spec.json")
@@ -256,6 +271,23 @@ def check_spec_agreement():
                     "SPEC/CODE DIVERGENCE: branch %s field %s = %r in code but "
                     "%r in fixture_spec.json."
                     % (branch, key, value, spec_branches.get(branch, {}).get(key)))
+    # The ruling field: correct_outcome in the spec must agree with the
+    # hardcoded shipped outcome table (exit 2 = blocked/reassess/hold,
+    # exit 0 = execute; repair applied only on continuity).
+    SPEC_OUTCOME_TO_SHIPPED = {
+        "EXECUTE": (0, True),
+        "REASSESS": (2, False),
+        "BLOCKED_AT_BOUNDARY": (2, False),
+        "HOLD_ESCALATE": (2, False),
+    }
+    for branch, expected in SHIPPED_I2.items():
+        outcome = spec_branches.get(branch, {}).get("correct_outcome")
+        if SPEC_OUTCOME_TO_SHIPPED.get(outcome) != expected:
+            raise SystemExit(
+                "SPEC/CODE DIVERGENCE: branch %s correct_outcome %r does not "
+                "match the shipped outcome %s -- the register's ruling and "
+                "the evaluator must not drift apart."
+                % (branch, outcome, expected))
     if sorted(spec.get("gates", [])) != ["Q0", "Q1", "Q2", "Q3", "Q4", "Q5", "Q6"]:
         raise SystemExit("SPEC/CODE DIVERGENCE: gate register changed in "
                          "fixture_spec.json; update the evaluator and the "
@@ -344,8 +376,9 @@ def _selftest() -> int:
         states = " ".join(s for _g, s, _d in lines)
         if not (code == EXIT_PASS and applied):
             problems.append("I0 %s: stale patch must execute (capability absent)" % branch)
-        if states.count(CAPABILITY_ABSENT) < 2:
-            problems.append("I0 %s: trace must show CAPABILITY_ABSENT at Q1/Q2/Q4" % branch)
+        if states.count(CAPABILITY_ABSENT) != 3:
+            problems.append("I0 %s: trace must show CAPABILITY_ABSENT at "
+                            "exactly Q1/Q2/Q4" % branch)
     # I1 must reproduce the ineffective-control trace (S5 section 10.2) on
     # supersession: Q2 passes superficially, Q3/Q4 CONTROL_EXECUTED_FAILED.
     code, applied, lines, _ = _trace_gates_i1("supersession", BRANCHES["supersession"])
