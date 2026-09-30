@@ -1,30 +1,62 @@
 #!/usr/bin/env python3
-"""T08-S5Q2 stateful simulation -- an always-green pre-flight, step by step.
+"""T08-S5Q2 stateful simulation v2 -- three contrasting cases, one reference.
 
-A runnable companion to the modeled walkthrough promoted from the FG-TIDA
-contribution (use-cases #21, Annex T08 / UC-21, requirement S5-Q2):
-"Material preconditions are reassessed at use, not inherited from queue time."
+A runnable companion to the FG-TIDA contribution (use-cases #21, Annex T08 /
+UC-21, requirement S5-Q2): "Material preconditions are reassessed at use, not
+inherited from queue time."
 
-The world is stateful: the workflow is enqueued while a freeze holds, the
-freeze is lifted *while the item sits in the queue*, and the pre-flight gate
-runs at use time. Two validators are compared on the identical trace:
+Semantics (aligned with the S5 scenario): an *active freeze prohibits* the
+change; lifting it removes that restriction. The gate therefore consumes the
+*permitting* condition ``no_applicable_freeze`` (naming per the 2026-09-30
+joint review on use-cases #21): the repair is authorized while no freeze
+applies, and a freeze may become applicable *before* the queued item reaches
+its pre-flight gate. All registry conditions are permitting, so one uniform
+checker suffices; the before/after difference is purely the data source
+(queue-time snapshot vs use-time read).
+
+v1 demonstrated one thing only: SF-006 detects an *omission* relative to a
+stipulated reference. The joint review (2026-09-30, use-cases #21) correctly
+distinguished that from use-time reassessment and prevention. v2 therefore
+ships the three contrasting cases requested for the bounded review, plus an
+explicit prevention trace:
+
+  case A (omitted condition)  -- the freeze is never declared. Set-difference
+                                 against the reference finds the coverage gap.
+  case B (temporal, decisive) -- the freeze IS declared in both lists; its
+                                 *value* changes between queue and use. A
+                                 checker that re-reads the queue-time snapshot
+                                 passes; a checker that reads state at use
+                                 fails. Set-difference alone finds nothing
+                                 here; only the use-time read does.
+  case C (clean baseline)     -- declared, unchanged, valid. Execution remains
+                                 permitted (legitimate-activity control).
+
+Each case runs two implementations on the identical world trace:
 
   before  -- registry-driven pre-flight that evaluates the *queue-time
-             snapshot* over the *declared* registry only. It reports PASS on
-             the violated world. This is SF-006 (undeclared = unchecked,
-             see ../../failures/SF-006-undeclared-not-checked.md) and the
-             inherited-verdict shape of S5-Q2 in one trace.
-  after   -- the same trace with the SF-006 reverse-coverage control applied:
-             re-derive what the workflow actually depends on *at use time*,
-             diff against what is declared, then check. It fails, naming the
-             undeclared precondition.
+             snapshot* over the *declared* registry (SF-006 +
+             inherited-verdict shape).
+  after   -- the controlled implementation: (1) coverage diff against a
+             stipulated-complete reference, then (2) evaluation of declared
+             conditions against state read *at use time*, then (3) an
+             explicit prevention trace: attempted action -> disposition ->
+             resulting target state.
+
+Qualifications kept explicit (per the joint review):
+  * The reference's completeness is *stipulated* for the bounded fixture;
+    its provenance is an assumption of the demo, not a result.
+  * A use-time read implements reassessment here; establishing *freshness*
+    of that read (Q3 territory) is out of scope and stated as an assumption.
+  * A model result -- not an AWS product execution.
 
 Usage
 -----
-  python simulation.py                  # selftest (default): runs both traces
-                                        # and asserts the discriminating property
-  python simulation.py --trace before   # prints the silent-failure trace; exits 0
-  python simulation.py --trace after    # prints the controlled trace;   exits 2
+  python simulation.py                  # selftest (default): runs all three
+                                        # cases on both implementations and
+                                        # asserts the discriminating properties
+  python simulation.py --case A-omitted # paired verdicts for one case
+  python simulation.py --case B-temporal
+  python simulation.py --case C-clean
 
 Deterministic: no randomness, no clock, no network. stdlib only, Python 3.9+.
 """
@@ -35,162 +67,205 @@ import argparse
 import sys
 
 # --------------------------------------------------------------------------- #
-# The declared registry (what the pre-flight check iterates) and the actual
-# dependency set (what the workflow truly needs at use time). The gap between
-# them is the SF-006 defect: anything undeclared is never checked, never missed.
+# The declared registry as v1 shipped it, the stipulated-complete reference,
+# and the three case fixtures. In every fixture the pre-flight runs at use
+# time; only what the checker reads (snapshot vs live state) differs.
 # --------------------------------------------------------------------------- #
-DECLARED_REGISTRY = ("grant_valid", "subject_in_scope", "diag_complete")
-ACTUAL_DEPENDENCIES = DECLARED_REGISTRY + ("freeze_still_holds",)
+DECLARED_REGISTRY_V1 = ("grant_valid", "subject_in_scope", "diag_complete")
 
-# Workflow states (a minimal T08-style Step Functions lifecycle).
-QUEUED, PREFLIGHT, EXECUTED, ABORTED = "QUEUED", "PREFLIGHT", "EXECUTED", "ABORTED"
+# Stipulated-complete reference for the bounded fixture (assumption, not result).
+# All conditions are permitting (must hold at use). "no_applicable_freeze" is
+# True while no freeze applies; a freeze becoming applicable flips it to False.
+REFERENCE = ("grant_valid", "subject_in_scope", "diag_complete",
+             "no_applicable_freeze")
 
-EXIT_SILENT_PASS = 0   # before-mode: reproduces the silent failure, exits green
-EXIT_CONTROLLED_FAIL = 2  # after-mode: the control fires, exits non-zero
+# Case -> (declared registry, initial world, world event or None).
+# "world event" is a (key, new_value) applied to the live world after queueing.
+CASES = {
+    "A-omitted": (
+        DECLARED_REGISTRY_V1,
+        {"grant_valid": True, "subject_in_scope": True, "diag_complete": True,
+         "no_applicable_freeze": True},
+        ("no_applicable_freeze", False),
+    ),
+    "B-temporal": (
+        REFERENCE,
+        {"grant_valid": True, "subject_in_scope": True, "diag_complete": True,
+         "no_applicable_freeze": True},
+        ("no_applicable_freeze", False),
+    ),
+    "C-clean": (
+        REFERENCE,
+        {"grant_valid": True, "subject_in_scope": True, "diag_complete": True,
+         "no_applicable_freeze": True},
+        None,
+    ),
+}
+
+QUEUED, PREFLIGHT, EXECUTED, BLOCKED = "QUEUED", "PREFLIGHT", "EXECUTED", "BLOCKED"
+
+EXIT_PASS = 0
+EXIT_FAIL = 2
 
 
-def _world_at_queue_time() -> dict:
-    """Material state when the remediation is enqueued: the freeze holds."""
-    return {
-        "grant_valid": True,
-        "subject_in_scope": True,
-        "diag_complete": True,
-        "freeze_still_holds": True,
-    }
+def _run_case(case: str, impl: str):
+    """Run one case on one implementation.
 
-
-def _simulate(mode: str):
-    """Run the full stateful trace in one of the two modes.
-
-    Returns (exit_code, lines). The trace is identical up to the pre-flight
-    step; only the validator differs. Everything is printed as it happens so
-    the state changes are visible, not implied.
+    Returns (exit_code, lines). `repair_applied` tracks the target state so
+    the prevention claim is observable, not implied.
     """
+    declared, initial, event = CASES[case]
     lines = []
 
-    def say(step: str, state: str, text: str) -> None:
-        lines.append(f"t{len(lines)}  {state:<9} {text}" + (f"  [{step}]" if step else ""))
+    def say(state: str, text: str) -> None:
+        lines.append("t%d  %-9s %s" % (len(lines), state, text))
 
-    # -- t0: enqueue. The gate's future verdict is captured here, at queue time.
-    snapshot = dict(_world_at_queue_time())
-    say("enqueue", QUEUED, "material enqueued; queue-time snapshot recorded")
+    # -- t0: enqueue. The checker's data source is fixed here: snapshot.
+    snapshot = dict(initial)
+    say(QUEUED, "material enqueued; queue-time snapshot: %s"
+        % {k: snapshot[k] for k in sorted(snapshot)})
 
-    # -- t1: the world changes while nobody is looking. The freeze that
-    #        authorized this remediation is lifted. The snapshot does not move.
-    world = dict(snapshot)
-    world["freeze_still_holds"] = False
-    say("", QUEUED,
-        "world event: freeze lifted (freeze_still_holds -> False); "
-        "snapshot still says True")
+    # -- t1: the world may change while the item sits in the queue.
+    world = dict(initial)
+    if event is not None:
+        key, value = event
+        world[key] = value
+        say(QUEUED, "world event: %s -> %s  (snapshot still says %s)"
+            % (key, value, snapshot[key]))
 
-    # -- t2: the pre-flight gate runs at use time.
-    if mode == "before":
-        # Evaluates the DECLARED registry over the QUEUE-TIME SNAPSHOT.
-        # - undeclared preconditions are invisible by construction (SF-006);
-        # - even declared ones are judged on data inherited from queue time,
-        #   which is exactly what S5-Q2 forbids.
-        failed = [p for p in DECLARED_REGISTRY if not snapshot.get(p)]
-        say("preflight", PREFLIGHT,
-            "registry-driven check: %d declared precondition(s) evaluated "
-            "against the queue-time snapshot" % len(DECLARED_REGISTRY))
+    # -- t2: pre-flight at use time.
+    repair_applied = False
+    if impl == "before":
+        say(PREFLIGHT,
+            "before-impl: %d declared condition(s) evaluated over the "
+            "QUEUE-TIME snapshot" % len(declared))
+        failed = [p for p in declared if not snapshot.get(p)]
         if failed:
-            say("abort", ABORTED, "declared precondition failed: %s" % sorted(failed))
-            return 1, lines
-        verdict = "PASS"
-        say("", PREFLIGHT, "verdict: PASS  <-- "
-            "the violated, undeclared precondition was never in the frame")
-        # -- t3: execution proceeds on a stale authorization.
-        say("execute", EXECUTED, "remediation executed; the system fails silently")
+            say(PREFLIGHT, "verdict: FAIL -- declared condition(s) %s failed "
+                "on snapshot" % sorted(failed))
+            say(BLOCKED, "disposition: blocked at the gate -> target state "
+                "UNCHANGED")
+            return EXIT_FAIL, lines, repair_applied
+        say(PREFLIGHT, "verdict: PASS (all declared conditions held *at queue time*)")
     else:
-        # The SF-006 reverse-coverage control: re-derive the actual dependency
-        # set AT USE TIME, diff against the declared registry, then check.
-        undeclared = sorted(set(ACTUAL_DEPENDENCIES) - set(DECLARED_REGISTRY))
-        stale = sorted(set(DECLARED_REGISTRY) - set(ACTUAL_DEPENDENCIES))
-        say("preflight", PREFLIGHT,
-            "reverse-coverage control: actual-at-use vs declared, "
-            "%d vs %d item(s)" % (len(ACTUAL_DEPENDENCIES), len(DECLARED_REGISTRY)))
-        if undeclared or stale:
-            reasons = []
-            if undeclared:
-                reasons.append(
-                    "%s exist but are undeclared (S5-Q2 breach: "
-                    "preconditions not reassessed at use)" % undeclared)
-            if stale:
-                reasons.append("%s declared but inapplicable" % stale)
-            say("abort", ABORTED, "verdict: FAIL  -- " + "; ".join(reasons))
-            return EXIT_CONTROLLED_FAIL, lines
-        # (unreachable with the shipped fixture; kept so the control's green
-        # branch is explicit rather than implied)
-        verdict = "PASS"
-        say("", PREFLIGHT, "verdict: PASS")
-        say("execute", EXECUTED, "remediation executed; preconditions held at use")
-        return 0, lines
+        # Step 1: coverage diff against the stipulated-complete reference.
+        undeclared = sorted(set(REFERENCE) - set(declared))
+        if undeclared:
+            say(PREFLIGHT, "verdict: FAIL -- coverage gap: %s exist in the "
+                "reference but are undeclared (SF-006)" % undeclared)
+            say(BLOCKED, "disposition: blocked at the gate -> target state "
+                "UNCHANGED (prevention demonstrated, Q6 trace)")
+            return EXIT_FAIL, lines, repair_applied
+        # Step 2: evaluate declared conditions against state read AT USE TIME.
+        say(PREFLIGHT,
+            "after-impl: coverage complete (%d/%d); re-reading state at use time"
+            % (len(declared), len(REFERENCE)))
+        failed = [p for p in declared if not world.get(p)]
+        if failed:
+            say(PREFLIGHT, "verdict: FAIL -- declared condition(s) %s changed "
+                "between queue and use (S5-Q2 breach: verdict inherited from "
+                "queue time is forbidden)" % sorted(failed))
+            say(BLOCKED, "disposition: blocked at the gate -> target state "
+                "UNCHANGED (prevention demonstrated, Q6 trace)")
+            return EXIT_FAIL, lines, repair_applied
+        say(PREFLIGHT, "verdict: PASS (reassessed at use; conditions hold)")
 
-    return EXIT_SILENT_PASS, lines
+    # -- t3: the attempted action and the resulting target state (Q6 trace).
+    say(PREFLIGHT, "attempted action: apply repair to target")
+    repair_applied = True
+    if case == "C-clean":
+        say(EXECUTED, "disposition: executed -> target state CHANGED "
+            "(legitimate repair, no breach)")
+    else:
+        say(EXECUTED, "disposition: executed -> target state CHANGED "
+            "(repair applied during a breach; prevention never demonstrated)")
+    return EXIT_PASS, lines, repair_applied
+
+
+def _paired(case: str):
+    """Run both implementations on one case; return (before, after) triples."""
+    return _run_case(case, "before"), _run_case(case, "after")
+
+
+def _print_paired(case: str) -> int:
+    (bc, bl, _), (ac, al, _) = _paired(case)
+    print("=== case %s ===" % case)
+    print("-- before-impl (exit %d):" % bc)
+    print("\n".join(bl))
+    print("-- after-impl (exit %d):" % ac)
+    print("\n".join(al))
+    return 0 if (bc == 0 and ac == 0) or (bc != 0 and ac != 0) else 1
 
 
 def _selftest() -> int:
-    """The demo validates itself: the property is the discriminator.
+    """Assert the discriminating properties across all three cases.
 
-    A catalog about silent passes must not silently pass, so the selftest
-    asserts both halves (SF-011 discipline, see
-    ../../failures/SF-011-always-green-oracle.md):
-      1. before-mode PASSES on the violated world  -> the blindness is real;
-      2. after-mode  FAILS on the same world       -> the control can see it.
-    A validator that did neither (or both) would make the two traces identical,
-    and the assertion below would fire.
+    A catalog about silent passes must not silently pass (SF-011 discipline,
+    see ../../failures/SF-011-always-green-oracle.md). The properties:
+      A: before PASSes the omitted-condition world; after FAILs on coverage.
+      B: before PASSes the value-drift world (stale snapshot) AND the repair
+         is applied during an active freeze; after FAILs at use time AND the
+         target state is unchanged (prevention).
+      C: both PASS and the legitimate repair is applied.
     """
-    before_code, before_lines = _simulate("before")
-    after_code, after_lines = _simulate("after")
-
     problems = []
-    if "PASS" not in " ".join(before_lines):
-        problems.append("before-mode did not reproduce the silent PASS")
-    if before_code != EXIT_SILENT_PASS:
-        problems.append("before-mode exit code is %d, expected %d (the silent "
-                        "failure must exit green to be silent)"
-                        % (before_code, EXIT_SILENT_PASS))
-    if "freeze_still_holds" not in " ".join(after_lines):
-        problems.append("after-mode did not name the undeclared precondition")
-    if after_code != EXIT_CONTROLLED_FAIL:
-        problems.append("after-mode exit code is %d, expected %d"
-                        % (after_code, EXIT_CONTROLLED_FAIL))
 
-    print("T08-S5Q2 selftest")
-    print("-----------------")
-    print("  trace before : %d line(s), exit %d -> %s"
-          % (len(before_lines), before_code,
-             "silent PASS (reproduced)" if not problems else "UNEXPECTED"))
-    print("  trace after  : %d line(s), exit %d -> %s"
-          % (len(after_lines), after_code,
-             "controlled FAIL (reproduced)" if len(problems) < 2 else "UNEXPECTED"))
+    (bc, bl, b_applied), (ac, al, a_applied) = _paired("A-omitted")
+    if bc != EXIT_PASS or "PASS" not in " ".join(bl):
+        problems.append("A: before-impl must silently PASS the omitted-condition world")
+    if ac != EXIT_FAIL or "coverage gap" not in " ".join(al):
+        problems.append("A: after-impl must FAIL naming the coverage gap")
+    if not b_applied:
+        problems.append("A: before-impl must realize the breach (repair applied)")
+
+    (bc, bl, b_applied), (ac, al, a_applied) = _paired("B-temporal")
+    if bc != EXIT_PASS:
+        problems.append("B: before-impl must PASS the value-drift world (stale snapshot)")
+    if not b_applied:
+        problems.append("B: before-impl must apply the repair during the active freeze")
+    if ac != EXIT_FAIL or "changed between queue and use" not in " ".join(al):
+        problems.append("B: after-impl must FAIL on the use-time value change")
+    if a_applied:
+        problems.append("B: after-impl must BLOCK the repair (target unchanged)")
+
+    (bc, bl, b_applied), (ac, al, a_applied) = _paired("C-clean")
+    if bc != EXIT_PASS or ac != EXIT_PASS:
+        problems.append("C: both implementations must PASS the clean baseline")
+    if not (b_applied and a_applied):
+        problems.append("C: the legitimate repair must be applied by both")
+
+    print("T08-S5Q2 selftest v2 (three contrasting cases)")
+    print("-" * 46)
+    ok = "ok" if not problems else "FAILED"
+    print("  A-omitted : before=PASS(silent)  after=FAIL(coverage gap)   -> %s" % ok)
+    print("  B-temporal: before=PASS(stale)   after=FAIL(use-time read)  -> %s" % ok)
+    print("  C-clean   : before=PASS          after=PASS (both execute)  -> %s" % ok)
     if problems:
+        print()
         for p in problems:
             print("  FAIL %s" % p)
-        print("\nSELFTEST FAILED: the two traces no longer discriminate.")
+        print("\nSELFTEST FAILED: the cases no longer discriminate.")
         return 1
-    print("\nSELFTEST PASSED: identical world, two verdicts -- the control can fail, "
-          "the registry-driven check cannot.")
+    print("\nSELFTEST PASSED: set-difference catches omissions; the use-time "
+          "read catches value drift; prevention is shown as "
+          "attempt->disposition->target-state, not implied.")
     return 0
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="simulation",
-        description="Stateful simulation of an always-green pre-flight "
-                    "(UC-21 S5-Q2 / T08-AWS, SF-006 + SF-011).",
+        description="Stateful simulation of an always-green pre-flight, v2: "
+                    "three contrasting cases (UC-21 S5-Q2 / T08-AWS, SF-006 + SF-011).",
     )
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--trace", choices=["before", "after"],
-                      help="run one trace and exit with its verdict's code")
-    mode.add_argument("--selftest", action="store_true",
-                      help="run both traces and assert they discriminate (default)")
+    parser.add_argument("--case", choices=sorted(CASES),
+                        help="run both implementations on one case and print the paired traces")
+    parser.add_argument("--selftest", action="store_true",
+                        help="run all cases and assert they discriminate (default)")
     args = parser.parse_args(argv)
 
-    if args.trace:
-        code, lines = _simulate(args.trace)
-        print("\n".join(lines))
-        return code
+    if args.case:
+        return _print_paired(args.case)
     return _selftest()
 
 
