@@ -1,0 +1,16 @@
+{
+  "profile": "T08 (orchestrated workflow + managed store)",
+  "requirement": "UC-21 S5-Q2: material preconditions are reassessed at use, not inherited from queue time",
+  "condition_semantics": "all conditions are permitting (must hold at use); a freeze being applicable flips no_applicable_freeze to false",
+  "conditions": {
+    "grant_valid": "permitting: an authorization for the change is in force",
+    "subject_in_scope": "permitting: the subject is within the change's declared scope",
+    "diag_complete": "permitting: any required diagnostic/audit record is complete",
+    "no_applicable_freeze": "permitting: no freeze/prohibition applies to the target (naming per the 2026-09-30 joint review on FG-TIDA use-cases #21)"
+  },
+  "assumptions": {
+    "reference_completeness": "stipulated for the bounded fixture; made auditable by the spec-vs-code assertion the simulation runs at startup",
+    "freshness": "read-at-use implements reassessment; clock skew and logical ordering are out of scope (see extension research notes)",
+    "model_result": "a model result, not an AWS product execution"
+  }
+}
