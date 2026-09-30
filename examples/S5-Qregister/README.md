@@ -51,19 +51,24 @@ branches:
 | `G4-blanket-deny` | Q5 scope bug | `continuity` |
 
 Expected outcomes are hardcoded from the published register, never derived
-from running the mutated code. A design observation the register itself
-predicts: `G2` is *not* killed on `act-window`, because Q6 binds against the
-live actuation state — the gates are not interchangeable, and the mutation
-matrix documents which gate absorbs which defect.
+from running the mutated code. The mutants are hand-injected defect branches
+inside a documentary evaluator, not tool-generated mutations; the kill
+criterion, however, is purely behavioral — the observable
+`(exit, repair_applied)` pair must deviate from the shipped table. A design
+observation the register itself predicts: `G2` is *not* killed on
+`act-window`, because Q6 binds against the live actuation state — the gates
+are not interchangeable, and the mutation matrix documents which gate absorbs
+which defect.
 
 ## Product anchors (verified against AWS documentation, 2026-10-01)
 
 - **Q2 is structural, not optional**: Step Functions passes the start input as
   a snapshot; live external state requires an explicit Task state
   (docs.aws.amazon.com/step-functions/latest/dg/concepts-input-output-filtering.html).
-- **Q6 has a native lever**: `StopExecution` stops a running Standard
-  execution and is observable via EventBridge *Execution Status Change* —
-  "freeze before use" maps to a real product mechanism
+- **Q6 has a native lever**: a stop/abort primitive exists — `StopExecution`
+  terminates a running Standard execution and is observable via EventBridge
+  *Execution Status Change*; "freeze before use" must be layered on top of
+  such a stop primitive (freeze semantics are not a native feature)
   (docs.aws.amazon.com/step-functions/latest/apireference/API_StopExecution.html).
 - **Q4/Q6 binding primitives**: DynamoDB conditional writes + optimistic
   locking (version attribute) implement compare-before-act
@@ -91,3 +96,7 @@ python simulation.py --branch continuity | act-window | ambiguity
 python simulation.py --crosswalk        # crosswalk table + product anchors
 python simulation.py --mutants          # gate-layer kill matrix
 ```
+
+Note: `--branch` and `--crosswalk` are display modes and always exit 0 —
+only `--selftest` (and the CI gate that runs it) asserts anything.
+
