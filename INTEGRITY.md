@@ -87,3 +87,14 @@ Directories excluded as non-content: `.git`, `.mypy_cache`, `.pytest_cache`, `.r
 | `e10b234506e1680434bb242db34ec23da76ccdd76b0d3a4648aa44bb1ea1bbed` | `tools/samples/bad/unchecked_empty.py` |
 | `b8c24bca3fc37f4e000ab1f81b8ab466224cf5b150fcca6194c3c3a6e29247ba` | `tools/samples/bad/zero_items.py` |
 | `dd842218a37842dbed879ca832bbc0b7bc7fea277d75fe031772afd6d71f5bab` | `tools/samples/good/strict_gate.py` |
+
+---
+
+## Archival (manual note — not part of the generated manifest above)
+
+This catalog is archived on Zenodo for citation stability:
+
+- **Record (version 0.1.0):** https://doi.org/10.5281/zenodo.23051638
+- **Concept DOI (all versions):** https://doi.org/10.5281/zenodo.23051637
+- Deposited 2026-09-30 via the repository's `zenodo-deposit.yml` workflow.
+- License split is preserved in the deposit metadata: MIT for `tools/`, all rights reserved for `failures/` and `docs/` prose.
