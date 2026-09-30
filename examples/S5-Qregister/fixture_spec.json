@@ -1,0 +1,54 @@
+{
+  "example": "S5-Qregister",
+  "as_of": "2026-10-01",
+  "source": "FG-TIDA use-cases #21, Annex S5 sections 7-10 (gate register Q0-Q6) and Annex T08 (AWS Step Functions / RDS profile), at commit aec08fb5b0fac2ee399372370e9ee2a82a2d5779",
+  "branches": {
+    "continuity": {
+      "superseded_by_patch_b": false,
+      "freeze_applied": false,
+      "source_available": true,
+      "post_verdict_freeze": false,
+      "correct_outcome": "EXECUTE"
+    },
+    "supersession": {
+      "superseded_by_patch_b": true,
+      "freeze_applied": true,
+      "source_available": true,
+      "post_verdict_freeze": false,
+      "correct_outcome": "REASSESS"
+    },
+    "act-window": {
+      "superseded_by_patch_b": false,
+      "freeze_applied": false,
+      "source_available": true,
+      "post_verdict_freeze": true,
+      "correct_outcome": "BLOCKED_AT_BOUNDARY"
+    },
+    "ambiguity": {
+      "superseded_by_patch_b": false,
+      "freeze_applied": false,
+      "source_available": false,
+      "post_verdict_freeze": false,
+      "correct_outcome": "HOLD_ESCALATE"
+    }
+  },
+  "gates": [
+    "Q0",
+    "Q1",
+    "Q2",
+    "Q3",
+    "Q4",
+    "Q5",
+    "Q6"
+  ],
+  "profiles": [
+    "I0-ordinary",
+    "I1-defended",
+    "I2-complete"
+  ],
+  "assumptions": [
+    "Model result, not an AWS product execution.",
+    "Source freshness is expressed as a boolean (available/unavailable); clock skew and logical ordering (S5 Q3 deep semantics) stay out of scope here, as in examples/T08-S5Q2.",
+    "Reference completeness is stipulated for the bounded fixture and auditable via this file; the simulation fails loudly at startup if code and spec diverge."
+  ]
+}
