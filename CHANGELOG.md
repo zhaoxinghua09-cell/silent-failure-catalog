@@ -20,6 +20,8 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
 - **`REVIEW.md`** — the review log for this catalog: what was reviewed, the review mechanisms, the release-pipeline defect the review surfaced (and the gate that now prevents its return), and an honest positioning against MedXpertQA on the verifier-side axis. Added on `main` after `v0.1.0`; the canonical citation remains the immutable tag `v0.1.0`.
 
+- Landing-page rework: value proposition and badges now lead; the license notice is collapsed into a `<details>` block (rights text preserved verbatim, one-line notice stays visible); Jekyll theme enabled for GitHub Pages via `_config.yml`.
+
 ## [0.1.0] — 2026-09-29
 
 First release. The version number in `CITATION.cff` and in this file referred to no commit until
