@@ -22,6 +22,8 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
 - Landing-page rework: value proposition and badges now lead; the license notice is collapsed into a `<details>` block (rights text preserved verbatim, one-line notice stays visible); Jekyll theme enabled for GitHub Pages via `_config.yml`.
 
+- **`examples/T08-S5Q2/`** — a stateful simulation of the UC-21 S5-Q2 requirement on the T08 (AWS Step Functions / RDS) profile: the registry-driven pre-flight passes green on a world that breaches the requirement (SF-006 / SF-011), and the reverse-coverage control fails on the same trace, naming the undeclared precondition. Ships with a selftest that asserts the two traces still discriminate.
+
 ## [0.1.0] — 2026-09-29
 
 First release. The version number in `CITATION.cff` and in this file referred to no commit until
