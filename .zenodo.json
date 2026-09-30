@@ -35,6 +35,12 @@
       "identifier": "https://orcid.org/0009-0001-0512-1237",
       "relation": "isCompiledBy",
       "scheme": "url"
+    },
+    {
+      "identifier": "https://doi.org/10.5281/zenodo.23051637",
+      "relation": "isPartOf",
+      "scheme": "doi",
+      "resource_type": "software"
     }
   ],
   "notes": "License split: MIT (code, tools/) and all rights reserved (prose content, failures/ and docs/), with citation under attribution permitted. The 'other-open' license code is used because Zenodo records a single license and this deposit is deliberately split-licensed. Entries are append-only; a superseded entry stays online marked deprecated so that citations do not break."
