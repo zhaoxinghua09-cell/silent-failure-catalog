@@ -36,6 +36,7 @@
      still points at the check you can run yourself, right now, locally. -->
 [![gates](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/actions/workflows/gates.yml/badge.svg)](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/actions/workflows/gates.yml)
 [![Catalog validation](https://img.shields.io/badge/validation-check--catalog%20--selftest-0B1F3A)](tools/check-catalog.py)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23051638.svg)](https://doi.org/10.5281/zenodo.23051638)
 
 [Start here](docs/start-here.md) · [Taxonomy](docs/taxonomy.md) · [Question Map](docs/question-map.md) · [Catalog index](failures/) · [Take the challenge](docs/take-the-challenge.md) · [Contributing](CONTRIBUTING.md)
 
@@ -45,7 +46,7 @@
 
 ---
 
-> **Submitted to ITU FG-TIDA.** This catalog is the verifier-side challenge reference discussed in themes **#6** (*Verifier-side requirements and failure semantics*) and **#7**, submitted as **`FG-TIDA/use-cases#23`** and cited in those threads as the executable form of "a check that ran and could not fail" (SF-011) and the `checks-in-path` field (C7). Canonical pin: release **v0.1.0** at commit `e977a04a77c71b2f67925c06c343eca7874c98fb` (set digest `a5b9c7a7…`). [Earlier commit `82018d3c` is superseded: its content licence was CC BY 4.0 with a SynomosAI copyright line, both since withdrawn — see `LICENSE-CONTENT`.] The full clickable trail is on the profile README (`zhaoxinghua09-cell`).
+> **Submitted to ITU FG-TIDA.** This catalog is the verifier-side challenge reference discussed in themes **#6** (*Verifier-side requirements and failure semantics*) and **#7**, submitted as **`FG-TIDA/use-cases#23`** and cited in those threads as the executable form of "a check that ran and could not fail" (SF-011) and the `checks-in-path` field (C7). Canonical pin: release **v0.1.0** at commit `e977a04a77c71b2f67925c06c343eca7874c98fb` (set digest `a5b9c7a7…`). [Earlier commit `82018d3c` is superseded: its content licence was CC BY 4.0 with a SynomosAI copyright line, both since withdrawn — see `LICENSE-CONTENT`.] The full clickable trail is on the profile README (`zhaoxinghua09-cell`). Archived at Zenodo with DOI **10.5281/zenodo.23051638** (version 0.1.0, 2026-09-30; concept DOI **10.5281/zenodo.23051637**).
 
 ---
 
