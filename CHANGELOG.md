@@ -22,7 +22,7 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
 - Landing-page rework: value proposition and badges now lead; the license notice is collapsed into a `<details>` block (rights text preserved verbatim, one-line notice stays visible); Jekyll theme enabled for GitHub Pages via `_config.yml`.
 
-- **`examples/T08-S5Q2/`** — a stateful simulation of the UC-21 S5-Q2 requirement on the T08 (AWS Step Functions / RDS) profile: the registry-driven pre-flight passes green on a world that breaches the requirement (SF-006 / SF-011), and the reverse-coverage control fails on the same trace, naming the undeclared precondition. Ships with a selftest that asserts the two traces still discriminate.
+- **`examples/T08-S5Q2/` (v2)** — three contrasting cases on the UC-21 S5-Q2 requirement (T08 / AWS Step Functions-RDS profile): an omitted condition (SF-006 coverage gap), a declared condition whose value changes between queue and use (the decisive temporal case, caught only by a use-time read), and a clean baseline (legitimate activity preserved) — each with an explicit prevention trace (attempted action, disposition, resulting target state). Permitting-condition naming `no_applicable_freeze` adopted from the joint review; reference completeness stipulated and freshness/Q3 stated as assumptions. Selftest asserts the cases still discriminate.
 
 ## [0.1.0] — 2026-09-29
 
