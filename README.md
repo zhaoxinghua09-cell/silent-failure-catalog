@@ -205,6 +205,7 @@ See [`CITATION.cff`](CITATION.cff). Each entry carries an `as of` date — cite 
 | An open question, or something that looks wrong but is not a pattern yet | [`SUPPORT.md`](SUPPORT.md) |
 | A way to defeat the tooling | [`SECURITY.md`](SECURITY.md) |
 | The route from reader to contributor | [`docs/take-the-challenge.md`](docs/take-the-challenge.md) |
+| How this catalog was reviewed | [REVIEW.md](REVIEW.md) |
 
 These are the only outbound and entry links in this README, by policy — the rule is enforced by `check_promo_links` in [`tools/check-catalog.py`](tools/check-catalog.py), not by good intentions.
 
