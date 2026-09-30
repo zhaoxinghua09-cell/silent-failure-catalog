@@ -1,8 +1,8 @@
 # T08-S5Q2 · Example — four contrasting cases: omission, value drift, clean baseline, check-then-act window
 
-**Status**: `example` (v3) ｜ **Source**: FG-TIDA use-cases #21, Annex T08 (AWS Step Functions / RDS) · UC-21, requirement S5-Q2 ｜ **as of** 2026-09-30
+**Status**: `example` (v4) ｜ **Source**: FG-TIDA use-cases #21, Annex T08 (AWS Step Functions / RDS) · UC-21, requirement S5-Q2 ｜ **as of** 2026-09-30
 
-> **One line.** A Step-Functions-style pre-flight gate is compared against a controlled implementation on **four contrasting cases** — an omitted condition, a declared condition whose value changes between queue and use, a clean baseline, and a world change *after* the verdict but *before* the action — each with an explicit prevention trace (attempted action → disposition → resulting target state).
+> **One line.** A Step-Functions-style pre-flight gate is compared against a controlled implementation on **four contrasting cases** — an omitted condition, a declared condition whose value changes between queue and use, a clean baseline, and a world change *after* the verdict but *before* the action — each with an explicit prevention trace (attempted action → disposition → resulting target state) — and a **mutation suite** that breaks the controlled validator four ways and requires the selftest to kill every mutant.
 
 © 2026 赵兴华 / Steven Zhao · China. Rights reserved; theoretical text not under Apache-2.0.
 
@@ -43,6 +43,7 @@ python simulation.py --case A-omitted   # paired traces for one case
 python simulation.py --case B-temporal
 python simulation.py --case C-clean
 python simulation.py --case D-actwindow
+python simulation.py --mutants      # mutation kill matrix only
 ```
 
 `--case` exits 0 when the two implementations agree on the verdict, 1 when they discriminate (the interesting outcome).
@@ -55,6 +56,19 @@ The condition set is **not** hard-coded as an uncheckable assumption. [`fixture_
 - a case fixture whose world keys drift from the reference → `FIXTURE DIVERGENCE`.
 
 This converts the v2 qualification ("the reference's completeness is stipulated") into an auditable artifact. What remains open — and is *not* claimed here — is how references are obtained or created at catalog scale.
+
+## Who tests the tester (v4)
+
+A selftest that asserts the shipped validators discriminate is itself a validator — and a validator that cannot fail on a broken input is decoration ([SF-011](../../failures/SF-011-always-green-oracle.md)). So the selftest now also runs a **mutation suite**: four programmatic mutants of the `after` implementation, each disabling exactly one defense, each required to be *killed* — its observable `(exit, target-state)` pair must deviate from a hardcoded shipped-behavior table (hardcoded, so the assertion is not derived from a run of the code it tests) on at least one case:
+
+| Mutant | Defense disabled | Killed by |
+|---|---|---|
+| `M1-no-coverage-diff` | SF-006 coverage diff | **A-omitted** |
+| `M2-stale-read` | use-time state read | **B-temporal** |
+| `M3-no-boundary-recheck` | action-boundary re-check | **D-actwindow** |
+| `M4-polarity-flip` | all verdicts inverted | **A, B, C, D** (C proves a wrongly-blocking validator is also caught) |
+
+Each mutant corresponds to one row of the case table above — the mapping between defenses and cases is now *mechanically enforced*, not narrated. The selftest also asserts that FAIL diagnostics **name the offending condition** (`no_applicable_freeze`), not merely any failure. Gate 7 of [`.github/workflows/gates.yml`](../../.github/workflows/gates.yml) runs this selftest in CI on every push.
 
 ## What it proves, and what it does not
 
@@ -69,6 +83,6 @@ This converts the v2 qualification ("the reference's completeness is stipulated"
 
 | File | Purpose |
 |---|---|
-| [`simulation.py`](simulation.py) | the stateful simulation, its four cases, spec-agreement checks, and the selftest |
+| [`simulation.py`](simulation.py) | the stateful simulation, its four cases, spec-agreement checks, the selftest, and the mutation suite |
 | [`fixture_spec.json`](fixture_spec.json) | machine-readable source of the reference conditions; audited against the code at startup |
 | `README.md` | this page |
