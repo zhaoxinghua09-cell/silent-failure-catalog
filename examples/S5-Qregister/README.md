@@ -11,11 +11,17 @@ Annex source pinned at commit `aec08fb5b0fac2ee399372370e9ee2a82a2d5779`
 
 ## What it shows
 
-| Profile (T08 route) | Gate trace | Outcome on `supersession` |
+| Profile (local simulation) | Gate trace | Outcome on `supersession` |
 |---|---|---|
 | `I0-ordinary` | Q1/Q2/Q4 `CAPABILITY_ABSENT` — no semantic basis object at all (S5 §10.1) | stale patch **executes during the breach** |
 | `I1-defended` | Q2 passes superficially; Q3 reads a 5-minute cache, Q4 omits the Patch B generation — `CONTROL_EXECUTED_FAILED` (S5 §10.2) | stale patch **executes during the breach** |
 | `I2-complete` | every gate evidenced incl. Q6 recheck-to-act binding | **REASSESS → blocked** |
+
+> **Naming note:** `I0/I1/I2` here are **local simulation profiles** of this
+> example only. They are distinct from T08's `AWS-I2` walkthrough (the *same
+> strong implementation retained under context drift*), which this example
+> does not claim to implement; `I2-complete` corrects selected known branches
+> inside a documentary evaluator, nothing more.
 
 Fixture branches (per S5 §7.1): `continuity` (positive control — a deny-all
 implementation fails it), `supersession`, `act-window` (residual TOCTOU), and
@@ -28,7 +34,7 @@ implementation fails it), `supersession`, `act-window` (residual TOCTOU), and
 | Q1 explicit basis | case A (SF-006 omission) | Test B prep |
 | Q2 use-time recheck | case B (temporal drift) | Test B (base Semantic TOCTOU) |
 | Q3 source freshness | *assumption* in T08-S5Q2 (declared out of scope there) | Test C/D evidence |
-| Q4 supersession | case B variant (state transition) | Test C (D1 drift) |
+| Q4 supersession | case B variant (state transition) | Patch B supersession branch — **separate from D1**: D1 changes the applicable policy/source set *after* the corrected strong baseline is frozen, which is a different scenario |
 | Q5 bounded ambiguity/scope | *extension*: UNKNOWN is not permission | Test E (D3/D4/D5) |
 | Q6 recheck-to-act binding | case D (act-window) | Test B/C residual window |
 | positive continuity control | case C (clean baseline) | Test A (continuity admission) |
@@ -99,4 +105,5 @@ python simulation.py --mutants          # gate-layer kill matrix
 
 Note: `--branch` and `--crosswalk` are display modes and always exit 0 —
 only `--selftest` (and the CI gate that runs it) asserts anything.
+
 
