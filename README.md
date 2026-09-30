@@ -52,6 +52,8 @@
 > **Submitted to ITU FG-TIDA.** This catalog is the verifier-side challenge reference discussed in themes **#6** (*Verifier-side requirements and failure semantics*) and **#7**, submitted as **`FG-TIDA/use-cases#23`** and cited in those threads as the executable form of "a check that ran and could not fail" (SF-011) and the `checks-in-path` field (C7). **Canonical citation: the immutable release tag `v0.1.0`** — check it out and run `python tools/make-manifest.py --check` to confirm you hold the exact bytes; the integrity manifest recorded in `INTEGRITY.md` is authoritative. [Earlier commits `e977a04a` and `82018d3c` are superseded and must not be cited: `82018d3c` carried a withdrawn CC BY 4.0 / SynomosAI line — see `LICENSE-CONTENT`.] The full clickable trail is on the profile README (`zhaoxinghua09-cell`). Archived at Zenodo with DOI **10.5281/zenodo.23051638** (version 0.1.0, 2026-09-30; concept DOI **10.5281/zenodo.23051637**).
 >
 > **Runnable example.** The T08 walkthrough (UC-21 S5-Q2 via the SF-006 control) now runs as a stateful simulation with a selftest that asserts the two traces discriminate: [`examples/T08-S5Q2/`](examples/T08-S5Q2/README.md).
+>
+> **Gate-register crosswalk.** The UC-21 scenario's own Q0-Q6 register (Annex S5 sections 7-10) now runs as an executable crosswalk to that four-case matrix, reproducing the published capability-absent and ineffective-control traces and killing four gate-layer mutants: [`examples/S5-Qregister/`](examples/S5-Qregister/README.md).
 
 ---
 
