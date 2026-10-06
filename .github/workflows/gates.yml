@@ -9,11 +9,14 @@ name: gates
 # which is the failure shape this catalog is about. This workflow is the copy that
 # runs when nobody remembered anything.
 #
-# The seven gates below are the same seven, in the same order, with the same meaning,
-# as the ones in `.githooks/pre-commit`. If one list changes, the other one is wrong.
+# The eight gates below are the same eight, in the same order, with the same
+# meaning, as the ones in `.githooks/pre-commit`. If one list changes, the other
+# one is wrong.
 # (Gate 6 closes the gap where release-consistency ran in CI but not in the hook;
 # gate 7 runs the examples/T08-S5Q2 selftest, whose mutation suite is what makes
-# "the cases discriminate" a checked property instead of a claim.)
+# "the cases discriminate" a checked property instead of a claim;
+# gate 8 runs the examples/S5-Qregister selftest, added 2026-10-06 so that the
+# blinded experiment is exercised by CI rather than only by whoever remembered it.)
 
 on:
   push:
@@ -74,9 +77,13 @@ jobs:
         if: always()
         run: python tools/verify_release_consistency.py --repo-path . --ref v0.1.0
 
-      - name: 7/7 examples selftest (T08-S5Q2 cases + mutation suite)
+      - name: 7/8 examples selftest (T08-S5Q2 cases + mutation suite)
         if: always()
         run: python examples/T08-S5Q2/simulation.py --selftest
+
+      - name: 8/8 examples selftest (S5-Qregister blinded run + mutation suite)
+        if: always()
+        run: python examples/S5-Qregister/simulation.py --selftest
 
   negative-control:
     name: negative control · the manifest gate must be able to fail

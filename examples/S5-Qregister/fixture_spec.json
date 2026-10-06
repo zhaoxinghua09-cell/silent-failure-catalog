@@ -4,32 +4,58 @@
   "source": "FG-TIDA use-cases #21, Annex S5 sections 7-10 (gate register Q0-Q6) and Annex T08 (AWS Step Functions / RDS profile), at commit aec08fb5b0fac2ee399372370e9ee2a82a2d5779",
   "branches": {
     "continuity": {
-      "superseded_by_patch_b": false,
-      "freeze_applied": false,
+      "patch_b": false,
+      "freeze": false,
       "source_available": true,
       "post_verdict_freeze": false,
-      "correct_outcome": "EXECUTE"
+      "correct_outcome": "EXECUTE",
+      "expected_action": "APPLY",
+      "expected_target_changed": true
     },
     "supersession": {
-      "superseded_by_patch_b": true,
-      "freeze_applied": true,
+      "patch_b": true,
+      "freeze": false,
       "source_available": true,
       "post_verdict_freeze": false,
-      "correct_outcome": "REASSESS"
+      "correct_outcome": "REASSESS",
+      "expected_action": "NONE",
+      "expected_target_changed": false
+    },
+    "prohibition": {
+      "patch_b": false,
+      "freeze": true,
+      "source_available": true,
+      "post_verdict_freeze": false,
+      "correct_outcome": "DENY",
+      "expected_action": "NONE",
+      "expected_target_changed": false
+    },
+    "patch-and-freeze": {
+      "patch_b": true,
+      "freeze": true,
+      "source_available": true,
+      "post_verdict_freeze": false,
+      "correct_outcome": "REASSESS",
+      "expected_action": "NONE",
+      "expected_target_changed": false
     },
     "act-window": {
-      "superseded_by_patch_b": false,
-      "freeze_applied": false,
+      "patch_b": false,
+      "freeze": false,
       "source_available": true,
       "post_verdict_freeze": true,
-      "correct_outcome": "BLOCKED_AT_BOUNDARY"
+      "correct_outcome": "BLOCKED_AT_BOUNDARY",
+      "expected_action": "NONE",
+      "expected_target_changed": false
     },
     "ambiguity": {
-      "superseded_by_patch_b": false,
-      "freeze_applied": false,
+      "patch_b": false,
+      "freeze": false,
       "source_available": false,
       "post_verdict_freeze": false,
-      "correct_outcome": "HOLD_ESCALATE"
+      "correct_outcome": "HOLD_ESCALATE",
+      "expected_action": "NONE",
+      "expected_target_changed": false
     }
   },
   "gates": [
@@ -48,7 +74,12 @@
   ],
   "assumptions": [
     "Model result, not an AWS product execution.",
+    "Branch identity is held by the harness only; the implementation under test receives observables (current generation, source state/version, freeze state, supersession lineage, timestamps, authority/policy state, binding tokens) and never the branch name.",
+    "patch_b and freeze are two independent controls: all four combinations are separate branches and are ruled on separately.",
+    "The target state is an independent observation channel measured by the harness, not a value reported by the runner.",
     "Source freshness is expressed as a boolean (available/unavailable); clock skew and logical ordering (S5 Q3 deep semantics) stay out of scope here, as in examples/T08-S5Q2.",
-    "Reference completeness is stipulated for the bounded fixture and auditable via this file; the simulation fails loudly at startup if code and spec diverge."
+    "Reference completeness is stipulated for the bounded fixture and auditable via this file; the simulation fails loudly at startup if code and spec diverge.",
+    "Truth-table row 4: the patch-and-freeze trace records BOTH reasons (supersession AND the freeze prohibition), so (T,T) and (T,F) are distinguishable on the trace and by assertion, not only by branch name.",
+    "The target-state channel is read from the harness's own stateful target model after the harness's actuator performs the attempted action; the runner is never asked about the target."
   ]
 }

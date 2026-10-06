@@ -9,6 +9,75 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
 ### Added
 
+- **`examples/S5-Qregister/harness.py`** and **`examples/S5-Qregister/implementation.py`** —
+  the S5 gate-register example is now a *blinded experiment*. The harness holds the branch
+  table and builds the observation; the implementation under test receives only observables
+  (current generation, source state/version, freeze state, supersession lineage, timestamps,
+  authority/policy state, binding tokens) and cannot see which fixture produced them. The
+  harness also measures the target state on its own instead of believing the runner's
+  self-reported repair flag, and injects the four mutants after the runner has ruled.
+
+### Changed
+
+- **`examples/S5-Qregister/` is split into three files** (`harness.py` / `implementation.py` /
+  `simulation.py`). The blinding is a module boundary, not a convention.
+- **`Patch B` and the freeze are separate controls** (`patch_b` × `freeze`), so all four
+  combinations are distinct branches with distinct rulings; the previously-merged
+  `supersession` branch is joined by `prohibition` (freeze only) and `patch-and-freeze`
+  (both). This was review point R-4.
+- **The mutation suite was re-cut on the review's points**: the I2 layer's mutants are now
+  `M1–M4`, and the kill criterion is the three-channel observation
+  (guard decision, attempted action, independently probed target state) rather than a
+  runner-supplied boolean — review point R-5.
+- **Gate 8**: `.github/workflows/gates.yml` and `.githooks/pre-commit` both run
+  `examples/S5-Qregister/simulation.py --selftest`, so the blinded example is exercised by CI
+  and not only by whoever remembered to run it (review point R-2).
+- **`_print_crosswalk()` output and the Q6 anchor text now match `README.md`**: the Q4 row no
+  longer says "Test C (D1 drift)" (D1 is a different scenario), and the `StopExecution` line
+  reads as an *abort lever* with freeze semantics explicitly not a native feature, rather than
+  as a freeze mechanism — review point R-1.
+- **`_print_crosswalk()` moved to `examples/S5-Qregister/harness.py`** in the three-file
+  split (the entry point reaches it via `simulation.py --crosswalk`); its rows now live in one
+  module-level table shared with the README agreement gate below.
+
+### Review round 2 (2026-10-06, MUST M1–M4)
+
+- **Truth-table row 4 is asserted on the trace**: `patch-and-freeze` records **both reasons
+  present** (supersession AND the freeze prohibition) in its `I2` trace; the selftest
+  distinguishes `(T,T)` from `(T,F)` on that marker — the two branches share a guard decision,
+  so the trace is the only place the second reason can be told apart (`examples/S5-Qregister/`).
+- **The target-state channel is a state read, not a formula**: the harness owns a stateful
+  `TargetModel` its own actuator rewrites, and `probe_target_state()` reads the model's
+  pre/post snapshots instead of being a function of (guard decision, attempted action). A
+  blocked branch is evidenced by "the target is still at its baseline generation"
+  (`examples/S5-Qregister/`).
+- **`_assert_blind()` closed the three escape routes review round 2 named**: a lazy
+  `import harness`, a `fixture_spec.json` read, and any `open()` / `os.environ` /
+  `sys.modules` machinery in the implementation's executable code now fail the selftest
+  (string-literal dynamic-import shapes included). The earlier "closed by module boundaries"
+  sentence in the harness docstring was judged false by the review and is rewritten: the
+  boundary closes the ordinary escape; detection closes the resourceful ones.
+- **`examples/T08-S5Q2/`: the action-boundary re-verification is unconditional** — it runs
+  before *every* permitted actuation rather than only when the fixture declares a post-verdict
+  event; most runs re-verify an unchanged world (visible in the case-C trace), case D is where
+  it bites.
+- **`examples/T08-S5Q2/`: `M4-polarity-flip` replaced by `M4-blanket-deny`** — every gate
+  satisfied yet the action still refused; the clean baseline (case C) kills it. The old
+  polarity-flip mutant also flipped the exit code without inverting `repair_applied` (an
+  internally inconsistent mutant); it is removed, not patched.
+- **README/code agreement gate (S1)**: the S5-Qregister selftest parses
+  `examples/S5-Qregister/README.md` and fails if the crosswalk table or the mutant
+  "killed by" columns drift from `CROSSWALK_ROWS` / `MUTANT_KILLERS`.
+- **SHIPPED expectations in the fixture specs (S4)**: the shipped triples (guard, action,
+  target) are recorded per branch in `examples/S5-Qregister/fixture_spec.json`
+  (`expected_action`, `expected_target_changed`) and the shipped after-implementation pairs in
+  `examples/T08-S5Q2/fixture_spec.json` (`shipped_after`); both are asserted at startup.
+
+### Fixed
+
+- **`examples/S5-Qregister/simulation.py`** no longer branches on the fixture name; every
+  profile takes one `Observation` and decides from observables only.
+
 - **`index.md`** — a landing page for the documentation site, so that the repository's
   `homepage` resolves to a page instead of a 404. The alternative was to leave the field
   pointing at nothing, which is the shape this catalog documents. It is a landing page, not a

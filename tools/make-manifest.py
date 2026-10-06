@@ -103,6 +103,31 @@ def fmt_size(n: int) -> str:
     return "%.1f KiB" % (n / 1024.0) if n >= 1024 else "%d B" % n
 
 
+def hand_written_tail(path: Path) -> list:
+    """The lines of INTEGRITY.md that this tool does not own.
+
+    The generator owns the file up to and including the per-file digest table.
+    Everything after it was written by a person — the archival note that carries
+    the canonical citation is exactly that kind of content. Overwriting it would
+    silently delete a citation anchor every time somebody regenerated the
+    manifest: the tool would keep its hashes correct and quietly break the thing
+    the manifest exists to support.
+
+    The tail is only recognised when it is separated from the table by a blank
+    line, so a stray trailing newline is not mistaken for a section.
+    """
+    if not path.is_file():
+        return []
+    lines = path.read_text(encoding="utf-8").splitlines()
+    last_row = -1
+    for i, line in enumerate(lines):
+        if line.startswith("| `"):
+            last_row = i
+    if last_row < 0 or last_row + 1 >= len(lines) or lines[last_row + 1].strip():
+        return []
+    return lines[last_row + 1:]
+
+
 def write_outputs(root: Path, entries, skipped) -> str:
     digest = set_digest(entries)
     total_bytes = sum((root / p).stat().st_size for p, _ in entries)
@@ -157,7 +182,17 @@ def write_outputs(root: Path, entries, skipped) -> str:
     for path, file_digest in entries:
         lines.append("| `%s` | `%s` |" % (file_digest, path))
     lines.append("")
-    (root / "INTEGRITY.md").write_text("\n".join(lines), encoding="utf-8", newline="\n")
+
+    integrity = root / "INTEGRITY.md"
+    tail = hand_written_tail(integrity)
+    content = "\n".join(lines)
+    if tail:
+        content = content.rstrip("\n") + "\n\n" + "\n".join(tail).rstrip("\n") + "\n"
+    integrity.write_text(content, encoding="utf-8", newline="\n")
+    if tail:
+        print("note: preserved %d line(s) of hand-written content in "
+              "INTEGRITY.md (after the digest table) that the generator does "
+              "not own" % len(tail))
 
     if skipped:
         # Reported, not silent: an exclusion the reader cannot see is an exclusion that

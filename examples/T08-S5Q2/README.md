@@ -66,7 +66,7 @@ A selftest that asserts the shipped validators discriminate is itself a validato
 | `M1-no-coverage-diff` | SF-006 coverage diff | **A-omitted** |
 | `M2-stale-read` | use-time state read | **B-temporal** |
 | `M3-no-boundary-recheck` | action-boundary re-check | **D-actwindow** |
-| `M4-polarity-flip` | all verdicts inverted | **A, B, C, D** (C proves a wrongly-blocking validator is also caught) |
+| `M4-blanket-deny` | blocks even though every gate is satisfied | **C** (the clean baseline is the over-blocking detector) |
 
 Each mutant corresponds to one row of the case table above — the mapping between defenses and cases is now *mechanically enforced*, not narrated. The selftest also asserts that FAIL diagnostics **name the offending condition** (`no_applicable_freeze`), not merely any failure. Gate 7 of [`.github/workflows/gates.yml`](../../.github/workflows/gates.yml) runs this selftest in CI on every push.
 

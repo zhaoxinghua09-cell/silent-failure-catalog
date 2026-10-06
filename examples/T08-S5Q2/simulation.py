@@ -45,11 +45,21 @@ Case history
       asserted that the selftest itself would catch a *broken* validator.
       Mutation testing closes that loop: four programmatic mutants of the
       after-implementation (skip the coverage diff / read the stale snapshot /
-      skip the action-boundary re-check / invert every verdict) are executed
-      against the cases, and the selftest fails unless every mutant is
-      *killed* -- i.e., observable behavior deviates from the shipped table
-      on at least one case. The selftest also now asserts the FAIL
-      diagnostics *name the offending condition*, not merely any failure.
+      skip the action-boundary re-check / blanket-deny despite a satisfied
+      gate set) are executed against the cases, and the selftest fails unless
+      every mutant is *killed* -- i.e., observable behavior deviates from the
+      shipped table on at least one case. The selftest also now asserts the
+      FAIL diagnostics *name the offending condition*, not merely any failure.
+  v5  review round 2 (2026-10-06): the action-boundary re-verification runs
+      UNCONDITIONALLY before every permitted actuation -- not only when the
+      fixture declares a post-verdict event -- so the C trace shows the
+      recheck holding on an unchanged world and case D is where it bites
+      (dakleyer condition #3). The fourth mutant is ``M4-blanket-deny``:
+      every gate satisfied yet the action still refused, the over-blocking
+      shape the clean baseline exists to kill (dakleyer condition #4; the
+      previous polarity-flip mutant also flipped the exit code without
+      inverting ``repair_applied``, an internally inconsistent mutant -- it
+      is gone, not patched).
 
 Each case runs two implementations on the identical world trace:
 
@@ -57,8 +67,9 @@ Each case runs two implementations on the identical world trace:
              verdict inherited to the action (SF-006 + SF-011 shape).
   after   -- (1) coverage diff against the spec-derived reference,
              (2) evaluation of declared conditions against state read *at use
-             time*, (3) re-verification at the *action boundary* (closing the
-             case-D window), (4) an explicit prevention trace.
+             time*, (3) UNCONDITIONAL re-verification at the *action boundary*
+             before every permitted actuation (closing the case-D window),
+             (4) an explicit prevention trace.
 
 Qualifications kept explicit (per the joint review):
   * Reference completeness: stipulated for the bounded fixture, but now
@@ -137,16 +148,20 @@ MUTANTS = {
         "after-impl reads the queue-time snapshot instead of use-time state",
     "M3-no-boundary-recheck":
         "after-impl trusts the verdict and skips the action-boundary re-check",
-    "M4-polarity-flip":
-        "after-impl inverts every verdict (permitting treated as prohibiting)",
+    "M4-blanket-deny":
+        "after-impl blocks even though every gate is satisfied (a blanket "
+        "stop; the over-blocking shape the clean baseline exists to catch)",
 }
 
-# Shipped after-implementation behavior: case -> (exit, repair_applied).
+# Shipped after-implementation behavior: case -> (exit, repair_applied, stage).
+# The stage pins WHICH defense fired; the mutation kill criterion compares the
+# full triple, so a mutant caught by a different defense than the shipped one
+# is still killed (M2 vs the unconditional boundary recheck, review round 2).
 SHIPPED_AFTER = {
-    "A-omitted": (EXIT_FAIL, False),
-    "B-temporal": (EXIT_FAIL, False),
-    "C-clean": (EXIT_PASS, True),
-    "D-actwindow": (EXIT_FAIL, False),
+    "A-omitted": (EXIT_FAIL, False, "coverage"),
+    "B-temporal": (EXIT_FAIL, False, "use-time"),
+    "C-clean": (EXIT_PASS, True, "executed"),
+    "D-actwindow": (EXIT_FAIL, False, "boundary"),
 }
 
 
@@ -176,13 +191,35 @@ def check_spec_agreement():
                 "FIXTURE DIVERGENCE: case %s initial world keys %s do not "
                 "match the reference %s." % (case, sorted(initial),
                                              sorted(code_conds)))
+    # The shipped after-implementation table lives in the spec too (review
+    # round 2, S4): a drift between fixture_spec.json and SHIPPED_AFTER stops
+    # the run before any trace is printed.
+    spec_after = spec.get("shipped_after", {})
+    if sorted(spec_after) != sorted(SHIPPED_AFTER):
+        raise SystemExit(
+            "SPEC/CODE DIVERGENCE: fixture_spec.json shipped_after cases %s != "
+            "simulation SHIPPED_AFTER %s." % (sorted(spec_after),
+                                              sorted(SHIPPED_AFTER)))
+    for case, expected in SHIPPED_AFTER.items():
+        got = spec_after[case]
+        if got.get("exit") != expected[0] \
+                or got.get("repair_applied") != expected[1] \
+                or got.get("stage") != expected[2]:
+            raise SystemExit(
+                "SPEC/CODE DIVERGENCE: case %s shipped_after %r does not "
+                "match SHIPPED_AFTER %r." % (case, got, expected))
 
 
 def _run_case(case: str, impl: str, mutant: str | None = None):
     """Run one case on one implementation, optionally under a mutant.
 
-    Returns (exit_code, lines, repair_applied). ``repair_applied`` tracks the
-    target state so the prevention claim is observable, not implied.
+    Returns (exit_code, lines, repair_applied, stage). ``repair_applied``
+    tracks the target state so the prevention claim is observable, not
+    implied; ``stage`` names WHICH defense (or none) produced the outcome --
+    gate / coverage gap / use-time read / action boundary / executed /
+    blanket. Without the stage, a mutant disabled by a *different* defense
+    catching the same breach (M2 masked by the unconditional boundary
+    recheck, found in review round 2) would pass for the shipped behavior.
     """
     declared, initial, pre_event, post_event = CASES[case]
     lines = []
@@ -215,7 +252,7 @@ def _run_case(case: str, impl: str, mutant: str | None = None):
                 "on snapshot" % sorted(failed))
             say(BLOCKED, "disposition: blocked at the gate -> target state "
                 "UNCHANGED")
-            return EXIT_FAIL, lines, repair_applied
+            return EXIT_FAIL, lines, repair_applied, "gate"
         say(PREFLIGHT, "verdict: PASS (all declared conditions held *at queue time*)")
     else:
         # Step 1: coverage diff against the spec-derived reference.
@@ -227,7 +264,7 @@ def _run_case(case: str, impl: str, mutant: str | None = None):
                     "reference but are undeclared (SF-006)" % undeclared)
                 say(BLOCKED, "disposition: blocked at the gate -> target state "
                     "UNCHANGED (prevention demonstrated, Q6 trace)")
-                return EXIT_FAIL, lines, repair_applied
+                return EXIT_FAIL, lines, repair_applied, "coverage"
         # Step 2: evaluate declared conditions against state read AT USE TIME.
         # (M2 reverts the source to the queue-time snapshot -- the defect the
         # requirement forbids.)
@@ -242,8 +279,18 @@ def _run_case(case: str, impl: str, mutant: str | None = None):
                 "queue time is forbidden)" % sorted(failed))
             say(BLOCKED, "disposition: blocked at the gate -> target state "
                 "UNCHANGED (prevention demonstrated, Q6 trace)")
-            return EXIT_FAIL, lines, repair_applied
+            return EXIT_FAIL, lines, repair_applied, "use-time"
         say(PREFLIGHT, "verdict: PASS (reassessed at use; conditions hold)")
+        if mutant == "M4-blanket-deny":
+            # The mutant: a scope bug that refuses the action although every
+            # gate is satisfied. It models the over-blocking validator; the
+            # clean baseline (case C) is the case that kills it.
+            say(PREFLIGHT, "verdict: PASS (every declared condition holds -- "
+                "all gates satisfied)")
+            say(BLOCKED, "disposition: blocked anyway -- blanket deny despite "
+                "a fully satisfied gate set (scope bug; target state "
+                "UNCHANGED)")
+            return EXIT_FAIL, lines, repair_applied, "blanket"
 
     # -- t2.5 (case D): the world changes AFTER the verdict, BEFORE the action.
     if post_event is not None:
@@ -253,18 +300,23 @@ def _run_case(case: str, impl: str, mutant: str | None = None):
             "(after the gate's verdict, before the action)" % (key, value))
 
     # -- t3: the attempted action. The after implementation re-verifies at the
-    # action boundary (atomic check-then-act); the before implementation acts
-    # on the inherited verdict. (M3 disables the re-verification.)
+    # action boundary -- UNCONDITIONALLY, before every permitted actuation
+    # (2026-10-06 review, dakleyer condition #3: the recheck must not depend
+    # on the fixture declaring a post-verdict event; most runs re-verify an
+    # unchanged world, case D is the run where it bites). The before
+    # implementation acts on the inherited verdict. (M3 disables the
+    # re-verification.)
     say(PREFLIGHT, "attempted action: apply repair to target")
-    if impl == "after" and post_event is not None \
-            and mutant != "M3-no-boundary-recheck":
+    if impl == "after" and mutant != "M3-no-boundary-recheck":
         failed_now = [p for p in declared if not world.get(p)]
         if failed_now:
             say(BLOCKED, "disposition: BLOCKED at the action boundary -- "
                 "re-verification caught %s flipping after the verdict "
                 "(check-then-act gap closed; target state UNCHANGED)"
                 % sorted(failed_now))
-            return EXIT_FAIL, lines, repair_applied
+            return EXIT_FAIL, lines, repair_applied, "boundary"
+        say(PREFLIGHT, "boundary re-verification: conditions re-read at the "
+            "action boundary -> hold (unconditional recheck)")
     repair_applied = True
     if case == "C-clean":
         say(EXECUTED, "disposition: executed -> target state CHANGED "
@@ -272,20 +324,12 @@ def _run_case(case: str, impl: str, mutant: str | None = None):
     else:
         say(EXECUTED, "disposition: executed -> target state CHANGED "
             "(repair applied during a breach; prevention never demonstrated)")
-    return EXIT_PASS, lines, repair_applied
-
-
-def _run_case_polarity(case: str, impl: str, mutant: str | None = None):
-    """Wrapper applying the M4 polarity-flip mutant (verdict inversion)."""
-    code, lines, applied = _run_case(case, impl, mutant)
-    if mutant == "M4-polarity-flip" and impl == "after":
-        code = EXIT_FAIL if code == EXIT_PASS else EXIT_PASS
-    return code, lines, applied
+    return EXIT_PASS, lines, repair_applied, "executed"
 
 
 def _paired(case: str):
     """Run both implementations on one case; return (before, after) triples."""
-    return _run_case_polarity(case, "before"), _run_case_polarity(case, "after")
+    return _run_case(case, "before"), _run_case(case, "after")
 
 
 def _kill_matrix():
@@ -298,8 +342,8 @@ def _kill_matrix():
     for name in MUTANTS:
         killers = []
         for case in sorted(CASES):
-            code, _lines, applied = _run_case_polarity(case, "after", mutant=name)
-            if (code, applied) != SHIPPED_AFTER[case]:
+            observed = _run_case(case, "after", mutant=name)
+            if (observed[0], observed[2], observed[3]) != SHIPPED_AFTER[case]:
                 killers.append(case)
         matrix[name] = killers
     return matrix
@@ -315,7 +359,7 @@ def _print_matrix(matrix) -> None:
 
 
 def _print_paired(case: str) -> int:
-    (bc, bl, _), (ac, al, _) = _paired(case)
+    (bc, bl, _s, _st), (ac, al, _a, _ast) = _paired(case)
     print("=== case %s ===" % case)
     print("-- before-impl (exit %d):" % bc)
     print("\n".join(bl))
@@ -337,7 +381,8 @@ def _selftest() -> int:
          is applied during an active freeze; after FAILs at use time, naming
          the flipped condition, AND the target state is unchanged.
       C: both PASS and the legitimate repair is applied (over-blocking
-         detector).
+         detector); the after-impl trace shows the unconditional boundary
+         re-verification running even with no post-verdict event.
       D: both PASS the pre-flight; the world then flips post-verdict; before
          executes during the fresh breach (verdict alone is not a control),
          after blocks at the action boundary, naming the flipped condition.
@@ -346,7 +391,7 @@ def _selftest() -> int:
     """
     problems = []
 
-    (bc, bl, b_applied), (ac, al, a_applied) = _paired("A-omitted")
+    (bc, bl, b_applied, _st), (ac, al, a_applied, a_stage) = _paired("A-omitted")
     a_after_text = " ".join(al)
     if bc != EXIT_PASS or "PASS" not in " ".join(bl):
         problems.append("A: before-impl must silently PASS the omitted-condition world")
@@ -356,8 +401,11 @@ def _selftest() -> int:
         problems.append("A: after-impl diagnostics must name the omitted condition")
     if not b_applied:
         problems.append("A: before-impl must realize the breach (repair applied)")
+    if a_stage != "coverage":
+        problems.append("A: after-impl must block at the coverage stage, got %r"
+                        % a_stage)
 
-    (bc, bl, b_applied), (ac, al, a_applied) = _paired("B-temporal")
+    (bc, bl, b_applied, _st), (ac, al, a_applied, a_stage) = _paired("B-temporal")
     b_after_text = " ".join(al)
     if bc != EXIT_PASS:
         problems.append("B: before-impl must PASS the value-drift world (stale snapshot)")
@@ -369,14 +417,23 @@ def _selftest() -> int:
         problems.append("B: after-impl diagnostics must name the flipped condition")
     if a_applied:
         problems.append("B: after-impl must BLOCK the repair (target unchanged)")
+    if a_stage != "use-time":
+        problems.append("B: after-impl must block at the use-time read, got %r "
+                        "(a boundary-stage block would mean the use-time read "
+                        "is dead)" % a_stage)
 
-    (bc, bl, b_applied), (ac, al, a_applied) = _paired("C-clean")
+    (bc, bl, b_applied, _st), (ac, al, a_applied, _a_stage) = _paired("C-clean")
+    c_after_text = " ".join(al)
     if bc != EXIT_PASS or ac != EXIT_PASS:
         problems.append("C: both implementations must PASS the clean baseline")
     if not (b_applied and a_applied):
         problems.append("C: the legitimate repair must be applied by both")
+    if "boundary re-verification" not in c_after_text:
+        problems.append("C: the after-impl trace must show the unconditional "
+                        "boundary re-verification running even with no "
+                        "post-verdict event (recheck is not event-gated)")
 
-    (bc, bl, b_applied), (ac, al, a_applied) = _paired("D-actwindow")
+    (bc, bl, b_applied, _st), (ac, al, a_applied, a_stage) = _paired("D-actwindow")
     d_before_text = " ".join(bl)
     d_after_text = " ".join(al)
     if bc != EXIT_PASS or "PASS" not in d_before_text:
@@ -390,6 +447,9 @@ def _selftest() -> int:
         problems.append("D: after-impl diagnostics must name the post-verdict flip")
     if a_applied:
         problems.append("D: after-impl must leave the target unchanged")
+    if a_stage != "boundary":
+        problems.append("D: after-impl must block at the action boundary, got "
+                        "%r" % a_stage)
 
     matrix = _kill_matrix()
     survivors = [m for m, killers in matrix.items() if not killers]
@@ -397,12 +457,13 @@ def _selftest() -> int:
         problems.append("mutation: surviving mutant(s) %s -- the selftest "
                         "cannot see a broken validator" % survivors)
 
-    print("T08-S5Q2 selftest v4 (four contrasting cases + mutation suite)")
+    print("T08-S5Q2 selftest v5 (four contrasting cases + mutation suite; "
+          "unconditional boundary recheck; blanket-deny mutant)")
     print("-" * 62)
     ok = "ok" if not problems else "FAILED"
     print("  A-omitted  : before=PASS(silent)   after=FAIL(coverage gap)      -> %s" % ok)
     print("  B-temporal : before=PASS(stale)    after=FAIL(use-time read)     -> %s" % ok)
-    print("  C-clean    : before=PASS           after=PASS (both execute)     -> %s" % ok)
+    print("  C-clean    : before=PASS           after=PASS (recheck held)     -> %s" % ok)
     print("  D-actwindow: before=PASS(breach!)  after=BLOCK(boundary re-check)-> %s" % ok)
     print()
     _print_matrix(matrix)
@@ -423,11 +484,11 @@ def _selftest() -> int:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="simulation",
-        description="Stateful simulation of an always-green pre-flight, v4: "
+        description="Stateful simulation of an always-green pre-flight, v5: "
                     "four contrasting cases (UC-21 S5-Q2 / T08-AWS, SF-006 + "
-                    "SF-011), spec-derived reference, action-boundary "
-                    "re-verification, and a mutation suite that kills four "
-                    "broken-validator mutants.",
+                    "SF-011), spec-derived reference, UNCONDITIONAL "
+                    "action-boundary re-verification, and a mutation suite "
+                    "that kills four broken-validator mutants.",
     )
     parser.add_argument("--case", choices=sorted(CASES),
                         help="run both implementations on one case and print the paired traces")

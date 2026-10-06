@@ -11,6 +11,29 @@
   "assumptions": {
     "reference_completeness": "stipulated for the bounded fixture; made auditable by the spec-vs-code assertion the simulation runs at startup",
     "freshness": "read-at-use implements reassessment; clock skew and logical ordering are out of scope (see extension research notes)",
-    "model_result": "a model result, not an AWS product execution"
+    "model_result": "a model result, not an AWS product execution",
+    "boundary_recheck": "the after-implementation re-verifies at the action boundary unconditionally, before every permitted actuation; case D is the run where a post-verdict flip makes it bite"
+  },
+  "shipped_after": {
+    "A-omitted": {
+      "exit": 2,
+      "repair_applied": false,
+      "stage": "coverage"
+    },
+    "B-temporal": {
+      "exit": 2,
+      "repair_applied": false,
+      "stage": "use-time"
+    },
+    "C-clean": {
+      "exit": 0,
+      "repair_applied": true,
+      "stage": "executed"
+    },
+    "D-actwindow": {
+      "exit": 2,
+      "repair_applied": false,
+      "stage": "boundary"
+    }
   }
 }

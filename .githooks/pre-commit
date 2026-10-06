@@ -19,6 +19,7 @@
 #   3. Nothing is swallowed. No `|| true`, no output redirection to /dev/null.
 #   4. A missing gate script is a failure, not a skip.
 #
+#   2026-10-06: the S5-Qregister selftest joins gate 8 (mirroring CI).
 #   2026-09-30: the list below was extended to match CI gate-for-gate
 #   (release consistency + the examples/T08-S5Q2 selftest with its
 #   mutation suite). The two lists had already drifted -- CI ran six
@@ -72,6 +73,7 @@ run "de-identification scan"    tools/check-catalog.py --scan-leaks
 run "content manifest"          tools/make-manifest.py --check
 run "release consistency"       tools/verify_release_consistency.py --repo-path . --ref v0.1.0
 run "examples selftest"         examples/T08-S5Q2/simulation.py --selftest
+run "blinded example selftest"  examples/S5-Qregister/simulation.py --selftest
 
 if [ "$fail" -ne 0 ]; then
     echo "" >&2
