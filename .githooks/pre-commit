@@ -18,6 +18,10 @@
 #      check" is not "the check passed". Set PYTHON to point at one explicitly.
 #   3. Nothing is swallowed. No `|| true`, no output redirection to /dev/null.
 #   4. A missing gate script is a failure, not a skip.
+#   5. Nothing in this list names a version. The release gate reads the canonical
+#      ref out of README.md. A hard-coded tag here is a second source of truth, and
+#      it goes stale the moment the anchor moves (2026-10-07 -- the literal
+#      `--ref v0.1.0` sat in three call sites at once).
 #
 #   2026-10-06: the S5-Qregister selftest joins gate 8 (mirroring CI).
 #   2026-09-30: the list below was extended to match CI gate-for-gate
@@ -71,7 +75,7 @@ run "catalog selftest"          tools/check-catalog.py --selftest
 run "catalog consistency"       tools/check-catalog.py
 run "de-identification scan"    tools/check-catalog.py --scan-leaks
 run "content manifest"          tools/make-manifest.py --check
-run "release consistency"       tools/verify_release_consistency.py --repo-path . --ref v0.1.0
+run "release consistency"       tools/verify_release_consistency.py --repo-path .
 run "examples selftest"         examples/T08-S5Q2/simulation.py --selftest
 run "blinded example selftest"  examples/S5-Qregister/simulation.py --selftest
 

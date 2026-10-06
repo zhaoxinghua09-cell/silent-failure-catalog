@@ -17,10 +17,29 @@ name: gates
 # "the cases discriminate" a checked property instead of a claim;
 # gate 8 runs the examples/S5-Qregister selftest, added 2026-10-06 so that the
 # blinded experiment is exercised by CI rather than only by whoever remembered it.)
+#
+# 2026-10-07 — three defects in this file, each of them the shape this catalog
+# documents. They were found by checking the released artifact instead of the
+# intent: the canonical tag `v0.1.0` did not pass the command the README invites
+# readers to run, and nothing in this workflow could have noticed.
+#   1. `on.push` listed `branches: [main]` only, so a version tag triggered no run.
+#      The release the README tells readers to cite was the one commit no gate was
+#      ever executed on. Tags matching `v*` now trigger this workflow.
+#   2. The release-consistency step passed `--ref v0.1.0` explicitly. A hard-coded
+#      version inside the release check is a second source of truth, and it goes
+#      stale the moment the anchor moves — which is the defect class the gate exists
+#      to catch. The gate now reads the ref out of `README.md`.
+#   3. Gate 6 shells out to `gh api` to resolve the tag object, and no `GH_TOKEN`
+#      was set. On the runner it therefore failed to authenticate, printed
+#      "⚠ 远程 tag 校验跳过", and still exited 0 with "✅ 一致". The one check that
+#      could have seen a stale anchor never ran, inside the gate written to catch
+#      exactly that. `GH_TOKEN` is now provided, and a canonical ref that cannot be
+#      resolved is a failure rather than a skip.
 
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -35,6 +54,11 @@ jobs:
   gates:
     name: gates · python ${{ matrix.python }}
     runs-on: ubuntu-latest
+    # `gh` is preinstalled on the runner but unauthenticated unless a token is handed
+    # to it. Gate 6 resolves the tag object through the API, so this token is part of
+    # whether the gate can run at all (defect 3 above).
+    env:
+      GH_TOKEN: ${{ github.token }}
     strategy:
       fail-fast: false
       matrix:
@@ -51,31 +75,31 @@ jobs:
         run: python -VV
 
       # `if: always()` on every gate, so that a failure in one does not hide the state
-      # of the other four. The job is red if any gate failed, and the report is the
+      # of the others. The job is red if any gate failed, and the report is the
       # complete list rather than the first casualty.
-      - name: 1/7 gate-lint --selftest
+      - name: 1/8 gate-lint --selftest
         if: always()
         run: python tools/gate-lint.py --selftest
 
-      - name: 2/7 check-catalog --selftest
+      - name: 2/8 check-catalog --selftest
         if: always()
         run: python tools/check-catalog.py --selftest
 
-      - name: 3/7 check-catalog (indexes, the six targets, link discipline)
+      - name: 3/8 check-catalog (indexes, the six targets, link discipline)
         if: always()
         run: python tools/check-catalog.py
 
-      - name: 4/7 check-catalog --scan-leaks
+      - name: 4/8 check-catalog --scan-leaks
         if: always()
         run: python tools/check-catalog.py --scan-leaks
 
-      - name: 5/7 make-manifest --check
+      - name: 5/8 make-manifest --check
         if: always()
         run: python tools/make-manifest.py --check
 
-      - name: 6/7 release-consistency (canonical pin self-consistent)
+      - name: 6/8 release-consistency (canonical anchor resolves · manifest matches)
         if: always()
-        run: python tools/verify_release_consistency.py --repo-path . --ref v0.1.0
+        run: python tools/verify_release_consistency.py --repo-path . --repo "${{ github.repository }}"
 
       - name: 7/8 examples selftest (T08-S5Q2 cases + mutation suite)
         if: always()
@@ -86,8 +110,16 @@ jobs:
         run: python examples/S5-Qregister/simulation.py --selftest
 
   negative-control:
+    # The job *name* is load-bearing and must not be edited on its own. Branch protection
+    # on `main` lists `negative control · the manifest gate must be able to fail` as a
+    # required status check, and a required check is matched by name. Renaming the job
+    # here silently un-requires it: the rule then waits for a context no run will ever
+    # report. That is this catalogue's own subject, so it is written down — if this name
+    # ever has to change, the branch-protection rule changes in the same move.
     name: negative control · the manifest gate must be able to fail
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -96,7 +128,7 @@ jobs:
 
       # README.md — "one byte is corrupted on purpose in CI and the verification is
       # *required* to fail" — and CONTRIBUTING.md both promise this. It is what makes
-      # the job above mean anything: a `--check` that cannot fail would pass all five
+      # the job above mean anything: a `--check` that cannot fail would pass all
       # gates, and the badge would be a claim about a run that proves nothing.
       #
       # Three assertions. The third is the one usually left out, and it is the one
@@ -126,3 +158,23 @@ jobs:
           cp "${RUNNER_TEMP}/pristine.md" "$target"
           python tools/make-manifest.py --check
           echo "accepted again — the gate is not simply always red"
+
+      # Gate 6 gained manifest coverage on 2026-10-07; before that it did not look at
+      # the manifest at all, which is how a release tag shipped carrying a stale one.
+      # Coverage that is never shown to be able to fail is coverage by assertion, so
+      # the same one-byte drift is put through gate 6 as well, and the tree is then
+      # restored and re-checked — the "stuck red" discriminator again, on the new path.
+      - name: D — gate 6 fails on the same drift, and passes again once it is restored
+        run: |
+          set -u
+          target="$(ls failures/SF-*.md | head -1)"
+          cp "$target" "${RUNNER_TEMP}/pristine.md"
+          printf 'X' >> "$target"
+          if python tools/verify_release_consistency.py --repo-path . --no-remote; then
+            echo "::error::gate 6 exited 0 while the tree had drifted from the manifest"
+            exit 1
+          fi
+          echo "rejected, as required"
+          cp "${RUNNER_TEMP}/pristine.md" "$target"
+          python tools/verify_release_consistency.py --repo-path . --no-remote
+          echo "accepted again"

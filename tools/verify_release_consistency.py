@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-verify_release_consistency.py — 统一发布一致性校验（仓发布物级门禁）
+r"""verify_release_consistency.py — 统一发布一致性校验（仓发布物级门禁）
 
 为什么存在
 -----------
 文档有 external-rights-gate（内容层），但 **仓发布物（canonical pin / git tag / 许可证）**
-从未被任何门禁覆盖。本次（2026-09-30）就因此出现三向不一致：
+从未被任何门禁覆盖。2026-09-30 就因此出现三向不一致：
   - README 写 canonical = v0.1.0 @ e977a04a
   - v0.1.0 git tag 实际指向 68f1f815583（≠ e977a04a）
   - e977a04a 快照自己的 README 又自指 82018d3c（已撤回版）
@@ -16,14 +15,33 @@ verify_release_consistency.py — 统一发布一致性校验（仓发布物级�
 canonical 引用必须一致、且指向一个真实存在且自洽的 tag；set digest 两处一致；
 许可证 © 行与保留所有权利在位；已撤回的 82018d3c 不得再作为 canonical 引用。
 
+2026-10-07 —— 本门禁自己被抓到两个盲区，同轮补上（见 CHANGELOG 0.1.1）：
+
+  1) **不覆盖 content manifest**。canonical tag `v0.1.0` 的 `manifest.sha256` 与该 tag
+     的树不一致（加第 6 门禁的那次提交没有重生成 manifest），而本脚本只做「文档 ↔ 文档」
+     自洽，看不见「文档 ↔ 实体」的偏离 ⇒ 同一个 tag 上，`make-manifest.py --check` 报
+     FAIL，本脚本报「✅ 一致」。两个"完整性"校验器对同一对象给出相反结论。
+     补法：直接委派 `make-manifest.py --check`（复用单一实现，不重造第二套哈希逻辑）。
+
+  2) **远程 tag 校验在 CI 里静默跳过**。它要调 `gh api`，而 workflow 没给 `GH_TOKEN`，
+     runner 上 gh 未认证 ⇒ 每次走 err 分支打印「⚠ 跳过」后**仍判 ✅ 且 exit 0**。
+     即本门禁的招牌能力（"tag 对象解析到自洽快照"）从未真正执行过 —— 正是本 catalog
+     所命名的病（一个跑不起来却被记为通过的门禁），长在本门禁自己身上。
+     补法：CI 注入 GH_TOKEN；且「声明了 canonical 锚却解析不到」= FAIL（不是跳过）。
+
+另：`--ref` 不再硬编码。2026-10-07 前三处调用都写死 `--ref v0.1.0`，改锚时必有一处漏改 ——
+硬编码版本号本身就是第二个真源。现改为从 README 的 canonical 推导。
+
 用法
 ----
-  python verify_release_consistency.py --repo-path . [--ref v0.1.0] [--repo owner/name]
+  python verify_release_consistency.py --repo-path . [--ref v0.1.1] [--repo owner/name]
   python verify_release_consistency.py --repo zhaoxinghua09-cell/silent-failure-catalog
 
 退出码：0 = 一致；1 = 不一致（逐条打印 FAIL，不静默）。
 """
 import argparse
+import base64
+import json
 import os
 import re
 import subprocess
@@ -57,11 +75,14 @@ def extract_canonical(text):
 
 
 def extract_set_digest(text):
-    """只认两种明确写法，避免把历史 commit SHA 误当 set digest。
+    r"""只认两种明确写法，避免把历史 commit SHA 误当 set digest。
 
     - INTEGRITY.md 权威格式： `**Set digest (SHA-256)** | \`<64-hex>\``
     - README 显式 code-span： `set digest \`<hex>\``（要求 digest 紧跟在 'set digest' 后的反引号里）
     其余（如 "the set digest recorded in INTEGRITY.md" 后跟历史 SHA）一律不匹配 → 返回 None。
+
+    该 docstring 为 raw 串：`\`` 在普通串里是无效转义，Python 3.12 会告
+    SyntaxWarning（2026-10-07 于 CI 日志实证），`-W error` 下直接失败。
     """
     if text is None:
         return None
@@ -81,30 +102,55 @@ def remote_canonical(repo, ref):
             ["gh", "api", f"repos/{repo}/git/refs/tags/{ref}"],
             capture_output=True, text=True, timeout=30)
         if out.returncode != 0:
-            return ("err", out.stderr.strip()[:120])
-        import json
+            return ("err", out.stderr.strip()[:160])
         obj = json.loads(out.stdout)
-        sha = obj.get("object", {}).get("sha") or obj.get("sha")
+        target = obj.get("object", {})
+        sha = target.get("sha") or obj.get("sha")
         if not sha:
             return ("err", "no sha in ref")
+        # 附注 tag（annotated）指向的是 tag 对象而非 commit；先解引用，否则下面按 sha 取
+        # README 会取错东西、变成假 FAIL。本仓切的是轻量 tag（v0.1.0 即其一），所以今天
+        # 无影响 —— 但"因为没人会那么做"不是理由，正是本 catalog 记的那类假设。
+        if target.get("type") == "tag":
+            tout = subprocess.run(
+                ["gh", "api", f"repos/{repo}/git/tags/{sha}"],
+                capture_output=True, text=True, timeout=30)
+            if tout.returncode != 0:
+                return ("err", tout.stderr.strip()[:160])
+            sha = json.loads(tout.stdout).get("object", {}).get("sha") or sha
         # 读该 commit 的 README
         rout = subprocess.run(
             ["gh", "api", f"repos/{repo}/contents/README.md?ref={sha}"],
             capture_output=True, text=True, timeout=30)
         if rout.returncode != 0:
-            return ("err", rout.stderr.strip()[:120])
+            return ("err", rout.stderr.strip()[:160])
         robj = json.loads(rout.stdout)
-        import base64
         rtext = base64.b64decode(robj["content"]).decode("utf-8", "replace")
         return extract_canonical(rtext)
     except Exception as e:  # noqa
-        return ("err", str(e)[:120])
+        return ("err", str(e)[:160])
+
+
+def manifest_check(repo_path):
+    """委派 tools/make-manifest.py --check。返回 (exit_code, output)。
+
+    为什么是委派而不是重写：manifest 的哈希规则（域分隔串、路径排序、排除集）只能有一份
+    实现。第二份实现会自己漂移，而两份"权威"对不上时读者无法判断信哪一个 —— 这正是
+    v0.1.0 上发生的事（两个校验器对同一 tag 给出相反结论）。
+    """
+    script = os.path.join(repo_path, "tools", "make-manifest.py")
+    if not os.path.isfile(script):
+        return (1, "tools/make-manifest.py is missing — a gate that is not there is not a gate")
+    p = subprocess.run([sys.executable, script, "--check", "--root", os.path.abspath(repo_path)],
+                       capture_output=True, text=True, timeout=180)
+    return (p.returncode, (p.stdout + p.stderr).strip())
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo-path", default=".")
-    ap.add_argument("--ref", default="v0.1.0")
+    ap.add_argument("--ref", default=None,
+                    help="canonical 引用（tag 名）；省略则从 README 推导（不硬编码版本号）")
     ap.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""),
                     help="owner/name；提供则额外校验 tag 指向的快照自洽")
     ap.add_argument("--no-remote", action="store_true")
@@ -127,6 +173,9 @@ def main():
         fails.append("INTEGRITY.md 未声明 canonical pin")
     if c_r and c_i and c_r != c_i:
         fails.append(f"canonical 不一致：README={c_r} ≠ INTEGRITY={c_i}")
+
+    # ref：省略 --ref 时从 README canonical 推导（消除硬编码版本号这一漂移源）
+    ref = args.ref or (c_r[1] if (c_r and c_r[0] == "tag") else "")
 
     # 2) set digest 两处一致
     d_r = extract_set_digest(readme)
@@ -158,17 +207,33 @@ def main():
                     fails.append(f"{name} 在 canonical/cite 语境引用了已撤回的 82018d3c")
                     break
 
-    # 5) 远程 tag 自洽（可选）
-    remote_note = ""
+    # 5) content manifest（文档 ↔ 实体）—— 2026-10-07 新增覆盖
+    mm_code, mm_out = manifest_check(rp)
+    if mm_code != 0:
+        fails.append("content manifest 与该树不一致（本门禁此前完全不看 manifest，"
+                     "v0.1.0 就是这样带着过期 manifest 发布的）")
+
+    # 6) 远程 tag 自洽
+    remote_note = "未启用（无仓上下文或 --no-remote）"
     if args.repo and not args.no_remote:
-        rc = remote_canonical(args.repo, args.ref)
-        if rc and rc[0] == "err":
-            remote_note = f"  ⚠ 远程 tag 校验跳过（{rc[1]}）"
-        elif rc and c_r and rc != c_r:
-            fails.append(f"远程 tag {args.ref} 指向的快照 canonical={rc} ≠ 本地 canonical={c_r}")
+        if not ref:
+            fails.append("无法确定 canonical tag：README/INTEGRITY 未声明，且未提供 --ref")
+            remote_note = "未执行（ref 未知）"
+        else:
+            rc = remote_canonical(args.repo, ref)
+            if rc and rc[0] == "err":
+                # 「跑不起来」不是「通过」。2026-10-07 实证：CI 缺 GH_TOKEN，这里一直
+                # 静默跳过，门禁仍打印 ✅ 并 exit 0 —— 本 catalog 所命名的病。
+                fails.append(f"远程 tag {ref} 无法解析：{rc[1]}")
+                remote_note = "❌ 无法解析（声明了锚就必须能解析到它）"
+            elif rc and c_r and rc != c_r:
+                fails.append(f"远程 tag {ref} 指向的快照 canonical={rc} ≠ 本地 canonical={c_r}")
+                remote_note = "❌ 不一致"
+            else:
+                remote_note = f"已比对（{args.repo} @ {ref}）"
 
     # 输出
-    print("═ verify_release_consistency · --ref %s" % args.ref)
+    print("═ verify_release_consistency · --ref %s" % (ref or "（未声明）"))
     checks = [
         ("README canonical", c_r),
         ("INTEGRITY canonical", c_i),
@@ -177,14 +242,18 @@ def main():
     ]
     for label, val in checks:
         print("  • %-22s %s" % (label, val if val else "（无）"))
-    print("═ 远程 tag 校验：%s" % (remote_note or ("已比对" if (args.repo and not args.no_remote) else "未启用（--no-remote）")))
+    print("─ content manifest：%s" % ("✅ 与该树一致" if mm_code == 0 else "❌ 与该树不一致"))
+    if mm_code != 0:
+        for line in mm_out.splitlines():
+            print("      " + line)
+    print("═ 远程 tag 校验：%s" % remote_note)
 
     if fails:
         print("═ 判定：❌ 不一致 ——")
         for f in fails:
             print("   ❌ " + f)
         sys.exit(1)
-    print("═ 判定：✅ 一致（canonical 自洽、set digest 对齐、许可证在位）")
+    print("═ 判定：✅ 一致（canonical 自洽、manifest 与该树一致、set digest 对齐、许可证在位）")
     sys.exit(0)
 
 

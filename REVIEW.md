@@ -84,8 +84,50 @@ the check is required to fail).
 | 14 entries, each with a named failure, a minimal repro, a fix, and a negative control | `failures/` |
 | Linter and checker prove they can fail (self-tests) | `tools/* --selftest` |
 | Content integrity verifiable from any checkout | `make-manifest.py --check`, `INTEGRITY.md` |
-| Immutable, citable release | tag `v0.1.0`, Zenodo DOI `10.5281/zenodo.23051638` |
+| Immutable, citable release | tag `v0.1.1`, Zenodo DOI `10.5281/zenodo.23051638` (the deposit is 0.1.0) |
 | Review surfaced a real release-pipeline defect and it was fixed | this file + gate #6 |
+| The fixed gate was itself re-verified against the released artifact | tag `v0.1.1`, `make-manifest.py --check` passes on it |
+
+## Second review round (2026-10-07)
+
+The first round fixed the *document* layer of the canonical pin and added gate #6 to keep the
+documents consistent. It did not fix the *artifact* layer, and gate #6 could not see it. This
+round began at the one sentence the README asks a reader to act on — "check it out and run
+`python tools/make-manifest.py --check`" — and ran it on the tag that same sentence names.
+
+On tag `v0.1.0` that command fails: one file stale, one file unlisted. The same command passes
+on `main`, so the release was carrying a manifest generated before the gate it introduced. Four
+independent gaps, each of them this catalogue's own subject, held it in place:
+
+| # | Gap | Evidence |
+|---|---|---|
+| 1 | The tag was cut at the commit that added gate #6, and that commit did not regenerate `manifest.sha256`. | `make-manifest.py --check` at `v0.1.0` → exit 1 |
+| 2 | Gate #6 never inspected the manifest. It compared documents with documents, so it had no view of documents against the tree. | `grep -c 'manifest\|sha256' tools/verify_release_consistency.py` → `0` |
+| 3 | Gate #6's tag-resolution step needs `gh api`, and no `GH_TOKEN` was set on the runner. It printed "⚠ 远程 tag 校验跳过" and *still* reported "✅ 一致", exit 0. | run `37460164259`, step 6, both interpreters |
+| 4 | `on.push` listed `branches: [main]` only, so a version tag triggered no run at all. | `gates.yml` |
+
+On the same tag the two integrity checkers disagreed: `make-manifest.py --check` said FAIL,
+`verify_release_consistency.py` said 一致 and exited 0.
+
+What this round established, and what it did not:
+
+- The defect is confined to the manifest and release layer. `git diff v0.1.0..main -- failures/ docs/`
+  is empty, so every entry, its title, its `as of` date and its quoted line are unchanged.
+- `v0.1.0` is **not** re-pointed or re-cut. A published tag is a promise, and moving it would
+  destroy the one property an anchor has. A corrected release is tagged `v0.1.1`, and the README
+  states plainly why `v0.1.0` must not be cited.
+- The fix is in the gate, not in the prose: manifest coverage, a ref that is read rather than
+  written down, a token so the remote half can actually run, a trigger for version tags, and a
+  negative control that pushes real drift through the new path. A gate never shown to fail is a
+  gate by assertion.
+- Deliberately not done: nothing ties the `CITATION.cff` / `.zenodo.json` version fields to the
+  canonical tag, and `.github/workflows/zenodo-deposit.yml` still hard-codes `version: 0.1.0`
+  and an `sfc_v0.1.0.tar.gz` filename in the deposit it would create. Both are real drift
+  surfaces, and the second one is the sharper of the two: publishing a release for `v0.1.1`
+  today would deposit a file named for `v0.1.0` carrying `version: 0.1.0` in its metadata. It
+  was left alone on purpose — that path performs an irreversible publish, it cannot be
+  exercised without minting a DOI, and an untested edit to an irreversible path is the thing
+  this catalogue is about. Both are recorded here rather than half-built.
 
 ## Positioning vs MedXpertQA (honest comparison)
 
@@ -136,6 +178,7 @@ the question MedXpertQA's own multi-round expert review implicitly depends on.
 | 2026-09-30 | T08 negative-control demo published to FG-TIDA/use-cases #21 | use-cases #21 |
 | 2026-09-30 | Cross-check found a 3-way canonical-pin inconsistency; tag unified to `475a877…`; gate #6 (`verify_release_consistency.py`) added | this file, `gates.yml` |
 | 2026-09-30 | REVIEW.md (this file) authored and added to `main` | git history |
+| 2026-10-07 | Second review round: the canonical tag failed the check the README invites; gate #6 covered no manifest, silently skipped its own tag lookup, and no tag triggered CI. Fixed in the gate; `v0.1.1` tagged. | this file, `CHANGELOG.md` 0.1.1, run `37460164259` |
 
 ---
 

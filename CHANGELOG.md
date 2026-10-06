@@ -5,7 +5,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
-## [Unreleased]
+## [0.1.1] — 2026-10-07
+
+Release-integrity patch. The catalogue content is unchanged; what changed is the layer that
+guarantees a reader holds the bytes the release claims. See `REVIEW.md`, "Second review round".
 
 ### Added
 
@@ -81,6 +84,62 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
 ### Fixed
 
+- **The canonical tag did not pass the check its own README invites.** `v0.1.0` was tagged at
+  the commit that added the release-consistency gate, and that commit did not regenerate
+  `manifest.sha256` — so on `v0.1.0`, `python tools/make-manifest.py --check` reports one file
+  modified (`.github/workflows/gates.yml`) and one file not listed
+  (`tools/verify_release_consistency.py`), while the same command passes on `main`. Three
+  independent gaps made it invisible: the gate did not look at the manifest, the tag triggered
+  no CI run, and the gate's own tag-resolution step silently skipped (below). A corrected
+  release is tagged `v0.1.1`. The `failures/` and `docs/` trees are byte-identical between
+  `v0.1.0` and `v0.1.1`, so every entry id, title and `as of` date still resolves — the defect
+  is in the manifest layer, not the cited layer.
+
+- **`tools/verify_release_consistency.py` now covers the content manifest.** It previously
+  checked only that the documents agreed with each other; it had no view of the documents
+  against the tree. It now delegates to `make-manifest.py --check` rather than re-implementing
+  hashing, so the manifest rules keep exactly one implementation. The consequence of the old
+  shape, on tag `v0.1.0`: `make-manifest.py --check` reported FAIL while this gate reported
+  "✅ 一致" — two integrity checkers disagreeing about the same object.
+
+- **The remote-tag half of gate 6 silently skipped on every CI run.** The step shells out to
+  `gh api`; `GH_TOKEN` was never set, so `gh` was unauthenticated on the runner, the lookup
+  failed, the script printed "⚠ 远程 tag 校验跳过" and then still reported "✅ 一致" and exited
+  0. The step whose whole purpose is to resolve the anchor against the real tag object had
+  never executed. A canonical ref that cannot be resolved is now a failure rather than a skip,
+  and the workflow supplies the token. This is the catalogue's own subject — a check that could
+  not run, recorded as a check that passed — found inside the gate written to catch it.
+
+- **`tools/verify_release_consistency.py`** — an escaped backtick inside a non-raw docstring
+  raised `SyntaxWarning: invalid escape sequence` on Python 3.12, visible in the CI log of the
+  `v0.1.0`-era runs. Under `-W error` that form is a hard failure. The docstring is raw now.
+
+- **`.github/workflows/gates.yml`** — version tags matching `v*` now trigger the workflow
+  (previously the tagged commit was the one commit no gate ran on); `GH_TOKEN` is supplied to
+  both jobs; the step labels read `1/8 … 8/8` instead of `1/7 … 6/7, 7/8, 8/8` against a header
+  that already claimed eight gates; and a fourth negative control (D) puts the same one-byte
+  drift through gate 6, requires it to fail, then restores the tree and requires it to pass
+  again — because coverage that is never shown to be able to fail is coverage by assertion.
+
+- **`tools/verify_release_consistency.py` dereferences annotated tags** before reading the
+  tagged README. This repository cuts lightweight tags (`v0.1.0` is one), so the behaviour is
+  unchanged today; an annotated tag would otherwise have resolved to a tag object rather than a
+  commit and produced a false failure on a correct release.
+
+### Changed
+
+- **The release check no longer names a release version.** The literal `--ref v0.1.0` appeared
+  in `.github/workflows/gates.yml`, in `.githooks/pre-commit`, and as the script's own default.
+  A hard-coded version inside the release check is a second source of truth that goes stale the
+  moment the anchor moves, which is the defect class the check exists to catch. The gate now
+  derives the ref from `README.md`.
+
+  This was applied to the verification path only. `.github/workflows/zenodo-deposit.yml` still
+  hard-codes `version: 0.1.0` and an `sfc_v0.1.0.tar.gz` filename in the deposit it would
+  create. That path performs an irreversible publish, it cannot be exercised without actually
+  minting a DOI, and an untested edit to an irreversible path is the thing this catalogue is
+  about — so it is recorded in `REVIEW.md` rather than edited blind.
+
 - **`examples/S5-Qregister/simulation.py`** no longer branches on the fixture name; every
   profile takes one `Observation` and decides from observables only.
 
@@ -93,7 +152,7 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
   does not contain this file. A changelog entry naming a file as part of a release that does not
   contain it is the same defect class as the rest of this file's history.
 
-- **`REVIEW.md`** — the review log for this catalog: what was reviewed, the review mechanisms, the release-pipeline defect the review surfaced (and the gate that now prevents its return), and an honest positioning against MedXpertQA on the verifier-side axis. Added on `main` after `v0.1.0`; the canonical citation remains the immutable tag `v0.1.0`.
+- **`REVIEW.md`** — the review log for this catalog: what was reviewed, the review mechanisms, the release-pipeline defect the review surfaced (and the gate that now prevents its return), and an honest positioning against MedXpertQA on the verifier-side axis. Added on `main` after `v0.1.0`; the canonical citation is the immutable release tag named in `README.md`.
 
 - Landing-page rework: value proposition and badges now lead; the license notice is collapsed into a `<details>` block (rights text preserved verbatim, one-line notice stays visible); Jekyll theme enabled for GitHub Pages via `_config.yml`.
 
