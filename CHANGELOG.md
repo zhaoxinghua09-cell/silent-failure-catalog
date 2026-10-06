@@ -39,6 +39,12 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
 - **`_print_crosswalk()` moved to `examples/S5-Qregister/harness.py`** in the three-file
   split (the entry point reaches it via `simulation.py --crosswalk`); its rows now live in one
   module-level table shared with the README agreement gate below.
+- **`examples/` added to the MIT grant.** `LICENSE` now names `examples/` alongside
+  `tools/`, `.githooks/` and `.github/`, and states explicitly that the grant covers the
+  example-level README files there; `LICENSE-CONTENT` records the same. Raised when a
+  participant asked which terms cover `examples/S5-Qregister` and `examples/T08-S5Q2`
+  before redistributing the runnable companion — the previous text named three
+  directories, so the examples were covered by neither licence.
 
 ### Review round 2 (2026-10-06, MUST M1–M4)
 

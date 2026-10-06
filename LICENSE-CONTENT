@@ -14,7 +14,9 @@ under a public copyright licence, and it is **not** CC BY 4.0.
 `README.md`, `llms.txt`, `SUPPORT.md`, `SECURITY.md`, `CODE_OF_CONDUCT.md`,
 `CONTRIBUTING.md`, `CHANGELOG.md`, `AGENTS.md`, `failures/**/*.md`, `docs/**/*.md`.
 
-Code in `tools/`, `.githooks/` and `.github/` is licensed under **MIT** — see `LICENSE`.
+Code in `tools/`, `.githooks/`, `.github/` and `examples/` is licensed under **MIT** —
+see `LICENSE`. That MIT grant covers the example-level README files under `examples/**`
+as well, because they document the runnable code rather than state a position.
 
 Copyright (c) 2026 Xinghua Zhao (赵兴华 / Steven Zhao·China). All rights reserved.
 
