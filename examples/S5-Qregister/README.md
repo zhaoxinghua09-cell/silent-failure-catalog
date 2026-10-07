@@ -13,6 +13,16 @@ Annex source pinned at commit `aec08fb5b0fac2ee399372370e9ee2a82a2d5779`
 five points the adversarial review of 2026-10-05 raised before this example may
 join a joint comparison; see "Review feedback" below.
 
+**Revision 2026-10-07** — a third review pass asked for four tightenings, all
+applied here: (1) the crosswalk agreement gate now compares **every column**, not
+just the gate name, and is given a negative control; (2) the post-verdict freeze
+is delivered to the runner as an **effective timestamp**, not a pre-classified
+label — Q6 derives the lost binding itself; (3) the exit status is re-derived
+from the *final* verdict and checked for coherence against the rest of the
+record; (4) the mutant suite now states each mutant's **class** (input fault
+injection vs post-decision deviation), instead of a single claim that was untrue
+of one of them.
+
 ## Three files, and why the split
 
 | File | Role | Knows the branch identity? |
@@ -58,7 +68,7 @@ exactly the control that applies.
 | `supersession` | yes | no | `BLOCK_REASSESS` → affected generation requalified |
 | `prohibition` | no | yes | `DENY` (prohibition: the freeze alone blocks) |
 | `patch-and-freeze` | yes | yes | `BLOCK_REASSESS` (Patch B drives; the freeze does not hide it) |
-| `act-window` | no | no (`post_verdict_freeze`) | blocked at the action boundary (Q6) |
+| `act-window` | no | no — a freeze becomes effective *inside* the act window (`t_check <= t_freeze <= t_act`) | blocked at the action boundary (Q6) |
 | `ambiguity` | no | no (`source_available: false`) | bounded HOLD / escalation — an unknown state is not permission |
 
 A runner that merges the two controls cannot produce more than one of these
@@ -83,17 +93,27 @@ killing) that makes the register's traces auditable instead of narrative.
 
 ## Who tests the tester (gate layer)
 
-Four mutants of the `I2` gate layer, injected by the harness *after* the runner
-has already ruled — so the defect never lives inside the artifact under test.
-Each is killed on at least its crosswalk branch, and **no mutant may survive
+Four mutants of the `I2` gate layer, in **two classes**. They are stated as what
+they are, rather than bundled under one claim that fits only some of them:
+
+- **input fault injection** — the observation handed to the runner is altered
+  *before* it rules (`M2-cache-read` serves the use-time read from the stale,
+  pre-event view);
+- **post-decision deviation** — the verdict is rewritten *after* the runner has
+  ruled (`M1`, `M3`, `M4`).
+
+Neither class edits `implementation.py` itself. A **source-code mutation** — a
+defect written into the artifact under test — is deliberately *not* used here,
+because such a defect would be one we authored rather than one we measured. Each
+mutant is killed on at least its crosswalk branch, and **no mutant may survive
 anywhere**.
 
-| Mutant | Defect | Killed by |
-|---|---|---|
-| `M1-no-supersession` | Q4 outcome discarded | `supersession`, `patch-and-freeze` |
-| `M2-cache-read` | the use-time read is served from the stale pre-event view | `supersession`, `patch-and-freeze` |
-| `M3-no-binding` | Q6 recheck-to-act binding skipped | `act-window` |
-| `M4-blanket-deny` | scope bug: every gate satisfied and the target still untouched; a blanket stop, so the positive control breaks | `continuity` |
+| Mutant | Defect | Class | Killed by |
+|---|---|---|---|
+| `M1-no-supersession` | Q4 outcome discarded | post-decision deviation | `supersession`, `patch-and-freeze` |
+| `M2-cache-read` | the use-time read is served from the stale pre-event view | input fault injection | `supersession`, `patch-and-freeze` |
+| `M3-no-binding` | Q6 recheck-to-act binding skipped | post-decision deviation | `act-window` |
+| `M4-blanket-deny` | scope bug: every gate satisfied and the target still untouched; a blanket stop, so the positive control breaks | post-decision deviation | `continuity` |
 
 The kill criterion is the **three-channel observation**:
 
@@ -159,10 +179,24 @@ tautological.
   `sys.modules` machinery — the routes a boundary alone does not stop. Subtler
   covert channels remain out of scope for a documentary fixture and are stated
   here rather than left implied.
-- README/code agreement is itself a gate: the crosswalk table and the mutant
-  "killed by" columns above are parsed and compared against `CROSSWALK_ROWS` /
-  `MUTANT_KILLERS` at every selftest run, so this document cannot silently
-  drift from the code it describes.
+- README/code agreement is itself a gate, and it compares **every column** of the
+  crosswalk table (not just the gate name — the mapping columns are where a
+  silent drift hides) plus the mutant table's class and "killed by" columns,
+  against `CROSSWALK_ROWS` / `MUTANT_CLASS` / `MUTANT_KILLERS` at every selftest
+  run. The gate is also given a **negative control**: a README with one tampered
+  mapping cell must fail it, so the gate is shown to have teeth rather than
+  assumed to.
+- The post-verdict freeze reaches the runner as an **effective timestamp**
+  (`t_freeze`), not as a pre-classified label. Deciding that it falls inside the
+  check-to-act window — and so breaks the binding — is the Q6 gate's own
+  inference; handing over a `post_verdict` label would have pre-classified the
+  very answer Q6 exists to establish.
+- The observation record is checked for **internal coherence** on every run (and
+  on every mutant run): the exit status is the numeric form of the guard
+  decision, an EXECUTE guard implies the repair was attempted, and the target
+  moves exactly when it was — so a record such as `PASS + DENY + NONE +
+  unchanged` cannot be produced and believed. That assertion, too, carries a
+  negative control.
 
 ## Usage
 

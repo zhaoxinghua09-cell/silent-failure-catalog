@@ -61,7 +61,7 @@
 >
 > If you found this through one of our other projects, [`docs/start-here.md`](docs/start-here.md) maps a symptom to the entry that answers it, and [`docs/where-to-find-us.md`](docs/where-to-find-us.md) is the one page that carries all of our channels.
 >
-> The tooling here found **ten defects in itself** while being built. The record is in [`docs/building-this-catalog.md`](docs/building-this-catalog.md) — a catalog about silent passes that was itself silently passing would be worth nothing.
+> The tooling here found **eleven defects in itself** while being built — and every one is now a closed entry in [`docs/defect-ledger.json`](docs/defect-ledger.json), with the narrative record in [`docs/building-this-catalog.md`](docs/building-this-catalog.md). The count is stated there and not repeated here, on purpose: a catalog about silent passes that was itself silently passing would be worth nothing.
 
 ---
 

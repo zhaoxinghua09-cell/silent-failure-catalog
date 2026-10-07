@@ -5,6 +5,39 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
+## [Unreleased]
+
+Gates 9 and 10, three new hard rules, and the closure of an external review round.
+
+### Added
+
+- **`tools/checker-mutation.py`** — mutates this repository's own checks and requires each
+  mutation to break a selftest, so "our checks can fail" is a checked property. Its first run
+  found that 7 of the S5 selftest's 12 decision points had never been shown capable of failing.
+- **`tools/defect-closure.py`** — reads `docs/defect-ledger.json` and fails if any recorded
+  defect is open or missing evidence; it also resolves every path-like token in `gate_added`
+  and requires it to exist and (for tools) to be invoked by `.githooks/pre-commit`.
+- **`docs/defect-ledger.json`** — one structured record per defect (class, escape cause, root
+  cause, gate, evidence); nineteen entries.
+- **`AGENTS.md` rule 13** (every check must be shown able to fail), **rule 14** (every external
+  correction closes the loop), **rule 15** (a count is stated once), and a **Gate 0** section.
+- A **gate-count consistency check** in `tools/verify_release_consistency.py`: a live document
+  that states a gate count must agree with `.githooks/pre-commit` (the single source).
+
+### Changed
+
+- `.githooks/pre-commit`, `.github/workflows/gates.yml` and `AGENTS.md` no longer restate a
+  gate count; they point at the hook. The stale "seven gates" literal is gone.
+- `README.md` and `index.md` corrected; the defect count now points at its source.
+- `.github/PULL_REQUEST_TEMPLATE.md` no longer tells contributors to run "four gates" — it
+  runs the whole hook.
+
+### Fixed
+
+- `gate-lint.py` crashed with `KeyError: 'PARSE'` on an unparseable file (the `PARSE` finding
+  was emitted but never registered in `RULES`). Covered by a new selftest case.
+- `defect-closure.py` no longer fails open when the hook cannot be read.
+
 ## [0.1.1] — 2026-10-07
 
 Release-integrity patch. The catalogue content is unchanged; what changed is the layer that

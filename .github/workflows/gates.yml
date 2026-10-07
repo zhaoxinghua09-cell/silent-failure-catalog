@@ -9,9 +9,19 @@ name: gates
 # which is the failure shape this catalog is about. This workflow is the copy that
 # runs when nobody remembered anything.
 #
-# The eight gates below are the same eight, in the same order, with the same
-# meaning, as the ones in `.githooks/pre-commit`. If one list changes, the other
-# one is wrong.
+# The gates below are the same ones, in the same order, with the same meaning, as
+# the ones in `.githooks/pre-commit`. If one list changes, the other one is wrong.
+# The count is deliberately not written in prose here: AGENTS.md rule 15 keeps it in
+# one place, and a hard-coded number in this file would be a second source of truth.
+# (The `N/M` step labels are the exception -- they are structural, and they are what
+# makes a stale sync between the two lists visible.)
+# (Gate 10 runs tools/defect-closure.py, added 2026-10-07: it reads
+# docs/defect-ledger.json and fails if any recorded defect is open or missing
+# evidence, so a correction cannot be closed by editing only the named site.)
+# (Gate 9 runs tools/checker-mutation.py, added 2026-10-07: it mutates the S5
+# harness's own checks and requires each mutation to break that selftest, so
+# "our checks can fail" is exercised by CI rather than asserted. Review round 3
+# had found a gate that had never been shown to be able to fail.)
 # (Gate 6 closes the gap where release-consistency ran in CI but not in the hook;
 # gate 7 runs the examples/T08-S5Q2 selftest, whose mutation suite is what makes
 # "the cases discriminate" a checked property instead of a claim;
@@ -77,37 +87,49 @@ jobs:
       # `if: always()` on every gate, so that a failure in one does not hide the state
       # of the others. The job is red if any gate failed, and the report is the
       # complete list rather than the first casualty.
-      - name: 1/8 gate-lint --selftest
+      - name: 1/11 gate-lint --selftest
         if: always()
         run: python tools/gate-lint.py --selftest
 
-      - name: 2/8 check-catalog --selftest
+      - name: 2/11 check-catalog --selftest
         if: always()
         run: python tools/check-catalog.py --selftest
 
-      - name: 3/8 check-catalog (indexes, the six targets, link discipline)
+      - name: 3/11 check-catalog (indexes, the six targets, link discipline)
         if: always()
         run: python tools/check-catalog.py
 
-      - name: 4/8 check-catalog --scan-leaks
+      - name: 4/11 check-catalog --scan-leaks
         if: always()
         run: python tools/check-catalog.py --scan-leaks
 
-      - name: 5/8 make-manifest --check
+      - name: 5/11 make-manifest --check
         if: always()
         run: python tools/make-manifest.py --check
 
-      - name: 6/8 release-consistency (canonical anchor resolves · manifest matches)
+      - name: 6/11 release-consistency (canonical anchor resolves · manifest matches)
         if: always()
         run: python tools/verify_release_consistency.py --repo-path . --repo "${{ github.repository }}"
 
-      - name: 7/8 examples selftest (T08-S5Q2 cases + mutation suite)
+      - name: 7/11 examples selftest (T08-S5Q2 cases + mutation suite)
         if: always()
         run: python examples/T08-S5Q2/simulation.py --selftest
 
-      - name: 8/8 examples selftest (S5-Qregister blinded run + mutation suite)
+      - name: 8/11 examples selftest (S5-Qregister blinded run + mutation suite)
         if: always()
         run: python examples/S5-Qregister/simulation.py --selftest
+
+      - name: 9/11 checker-mutation (the checks themselves must be able to fail)
+        if: always()
+        run: python tools/checker-mutation.py
+
+      - name: 10/11 defect-closure (every recorded correction is closed with evidence)
+        if: always()
+        run: python tools/defect-closure.py
+
+      - name: 11/11 defect-closure selftest (that gate must be able to fail too)
+        if: always()
+        run: python tools/defect-closure.py --selftest
 
   negative-control:
     # The job *name* is load-bearing and must not be edited on its own. Branch protection

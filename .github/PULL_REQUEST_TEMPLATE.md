@@ -4,21 +4,18 @@
 
 <!-- One or two sentences. If it adds an entry, name it. If it fixes a tool, say which rule and which direction (false positive / false negative). -->
 
-## The four gates
+## The gates
 
-Run all four locally. Paste the output of the last one — CI runs the same set, and a pull request that fails here will fail there.
+The list has one source — `.githooks/pre-commit` — and CI mirrors it gate-for-gate,
+so the number is deliberately not repeated here. Run the whole gate and paste the
+tail of the output:
 
 ```bash
-python tools/gate-lint.py --selftest
-python tools/check-catalog.py --selftest
-python tools/check-catalog.py --scan-leaks
-python tools/make-manifest.py --check
+bash .githooks/pre-commit
 ```
 
-- [ ] `gate-lint.py --selftest` — exits 0
-- [ ] `check-catalog.py --selftest` — exits 0
-- [ ] `check-catalog.py --scan-leaks` — exits 0, or every remaining hit is a real finding I have explained below
-- [ ] `make-manifest.py --check` — exits 0 after I ran `python tools/make-manifest.py`
+- [ ] `bash .githooks/pre-commit` — exits 0 (it runs every gate; if one fails, it names it)
+- [ ] If the manifest gate is the one that failed: `python tools/make-manifest.py`, then re-run
 
 ## If this adds or changes a catalog entry
 

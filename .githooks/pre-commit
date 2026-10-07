@@ -23,6 +23,14 @@
 #      it goes stale the moment the anchor moves (2026-10-07 -- the literal
 #      `--ref v0.1.0` sat in three call sites at once).
 #
+#   2026-10-07: gate 10 joins -- tools/defect-closure.py reads docs/defect-ledger.json
+#   and fails if any recorded defect is open or missing evidence. It makes "a report
+#   was actually closed out" a checked property, so a correction cannot be answered
+#   by editing only the named site (rule 14).
+#   2026-10-07: gate 9 joins -- tools/checker-mutation.py mutates the harness's
+#   own checks and requires each mutation to break the S5 selftest, so "our
+#   checks can fail" is a checked property rather than a claim. (Review round 3
+#   found a gate that had never been shown to fail.)
 #   2026-10-06: the S5-Qregister selftest joins gate 8 (mirroring CI).
 #   2026-09-30: the list below was extended to match CI gate-for-gate
 #   (release consistency + the examples/T08-S5Q2 selftest with its
@@ -75,9 +83,12 @@ run "catalog selftest"          tools/check-catalog.py --selftest
 run "catalog consistency"       tools/check-catalog.py
 run "de-identification scan"    tools/check-catalog.py --scan-leaks
 run "content manifest"          tools/make-manifest.py --check
-run "release consistency"       tools/verify_release_consistency.py --repo-path .
+run "release consistency"       tools/verify_release_consistency.py --repo-path . --no-remote
 run "examples selftest"         examples/T08-S5Q2/simulation.py --selftest
 run "blinded example selftest"  examples/S5-Qregister/simulation.py --selftest
+run "checker mutation"          tools/checker-mutation.py
+run "defect closure"            tools/defect-closure.py
+run "defect closure selftest"   tools/defect-closure.py --selftest
 
 if [ "$fail" -ne 0 ]; then
     echo "" >&2

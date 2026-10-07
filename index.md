@@ -26,8 +26,9 @@ python tools/check-catalog.py           # internal consistency
 python tools/gate-lint.py --selftest    # the linter against its own samples
 ```
 
-The same seven gates run in CI on every push, on Python 3.9 and 3.12, including both negative
-controls.
+The same gates run in CI on every push, on Python 3.9 and 3.12, including both negative
+controls. The list lives in one place — `.githooks/pre-commit` — and CI mirrors it
+gate-for-gate; it is deliberately not counted here.
 
 ## Why this file exists
 

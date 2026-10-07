@@ -12,8 +12,9 @@ conventional:
     `prohibition` / `patch-and-freeze` / `act-window` / `ambiguity`) in
     `harness.py`; the branch **name never crosses this boundary**;
   * what crosses it is an :class:`Observation` -- a record of *observable*
-    quantities only (current generation, source state/version, freeze state,
-    supersession lineage, timestamps, authority/policy state, binding tokens);
+    quantities only (current generation, source state/version, the freeze state
+    as of the check, supersession lineage, timestamps -- including when a freeze
+    became effective -- authority/policy state, binding tokens);
   * this module therefore cannot take a decision "because it is the ambiguity
     branch": it can only take a decision from what it observed, which is the
     property the review asked for;
@@ -60,8 +61,14 @@ from __future__ import annotations
 # --------------------------------------------------------------------------- #
 
 FREEZE_NONE = "none"
-FREEZE_ACTIVE = "active"           # a freeze in force before the verdict
-FREEZE_POST_VERDICT = "post_verdict"  # lands after the verdict, before the act
+FREEZE_ACTIVE = "active"           # a freeze in force at the moment of the check
+
+# There is deliberately no "post-verdict freeze" label here. That a freeze lands
+# *after* the verdict is not an observable the harness may hand over: it is the
+# inference the Q6 gate has to make for itself, from the freeze-effective
+# timestamp measured against the check and actuation times (see
+# :func:`_freeze_lands_inside_act_window`). A pre-classified label would hand
+# the runner the very answer Q6 exists to establish.
 
 GUARD_EXECUTE = "EXECUTE"                    # gates satisfied, repair applied
 GUARD_REASSESS = "BLOCK_REASSESS"            # Q4 supersession -> requalify
@@ -137,6 +144,34 @@ CONTROL_EXECUTED_PASS = "CONTROL_EXECUTED_PASS"
 EXIT_PASS, EXIT_FAIL = 0, 2
 
 
+def exit_code_for(guard_decision):
+    """The single numeric handle for a *ruling*, derived from that ruling.
+
+    Kept in one place on purpose: a caller that replaces a verdict (the
+    harness's mutants do exactly that) must re-derive the exit status from the
+    final ruling, or the recorded observation can contradict itself -- a PASS
+    exit sitting next to a DENY ruling. ``run()`` and the harness therefore
+    both come through here, and cannot disagree about what PASS means.
+    """
+    return EXIT_PASS if guard_decision == GUARD_EXECUTE else EXIT_FAIL
+
+
+def _freeze_lands_inside_act_window(obs):
+    """Derive the Q6 breach from ordinary observations, not from a label.
+
+    The observations state *when* the freeze became effective. Whether that
+    instant falls between the check and the actuation -- and therefore breaks
+    the check-to-act binding -- is the runner's own inference; the harness
+    supplies the timestamps, not the conclusion.
+    """
+    t_check = obs.timestamps.get("t_check")
+    t_act = obs.timestamps.get("t_act")
+    t_freeze = obs.timestamps.get("t_freeze")
+    if t_check is None or t_act is None or t_freeze is None:
+        return False
+    return t_check <= t_freeze <= t_act
+
+
 # --------------------------------------------------------------------------- #
 # Implementation profiles. Signature: (Observation) -> Verdict.
 # No branch argument. No branch state in scope: this module does not import the
@@ -190,7 +225,7 @@ def _trace_gates_i1(obs):
                   "qualified basis"))
     lines.append(("Q5", "bypassed",
                   "action not held because no failure was detected"))
-    if obs.freeze_state == FREEZE_POST_VERDICT:
+    if _freeze_lands_inside_act_window(obs):
         lines.append(("Q6", "absent",
                       "no check-to-act binding; fresh post-verdict breach "
                       "undetected"))
@@ -251,8 +286,11 @@ def _trace_gates_i2(obs):
                       "active freeze in force -> scoped prohibition"))
         return Verdict(GUARD_DENY, ACTION_NONE, lines, "DENY (active freeze)")
     lines.append(("Q5", CONTROL_EXECUTED_PASS, "scoped response, bounded horizon"))
-    # Q6: recheck-to-act binding, against the live actuation state.
-    if obs.freeze_state == FREEZE_POST_VERDICT:
+    # Q6: recheck-to-act binding, against the live actuation state. The
+    # observations carry the freeze-effective time; recognising that it landed
+    # inside the check-to-act window -- and so re-opened the action boundary --
+    # is this gate's inference, not a label it was handed.
+    if _freeze_lands_inside_act_window(obs):
         lines.append(("Q6", CONTROL_EXECUTED_PASS,
                       "binding compared against the live actuation state; the "
                       "freeze flipped after the verdict -> action boundary reopened"))
@@ -279,5 +317,4 @@ def run(profile, obs):
     """
     fn = PROFILES[profile]
     verdict = fn(obs)
-    exit_code = EXIT_PASS if verdict.guard_decision == GUARD_EXECUTE else EXIT_FAIL
-    return exit_code, verdict
+    return exit_code_for(verdict.guard_decision), verdict

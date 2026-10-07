@@ -29,6 +29,12 @@ canonical 引用必须一致、且指向一个真实存在且自洽的 tag；set
      所命名的病（一个跑不起来却被记为通过的门禁），长在本门禁自己身上。
      补法：CI 注入 GH_TOKEN；且「声明了 canonical 锚却解析不到」= FAIL（不是跳过）。
 
+  3) **gate 计数无人看管**（2026-10-07 同日补）。`AGENTS.md` 两处与 `index.md` 一处仍写
+     「seven gates」，而 hook 当时已跑更多道 —— 计数散在多处、无单一真源、无门看管（rule 15
+     形同虚设）。现新增检查：活文档里的 gate 数必须等于 `.githooks/pre-commit` 的 `run`
+     调用数；史件（`CHANGELOG.md`、`docs/building-this-catalog.md`）排除，避免把"当时写了 N 道"
+     误判为当前声明。
+
 另：`--ref` 不再硬编码。2026-10-07 前三处调用都写死 `--ref v0.1.0`，改锚时必有一处漏改 ——
 硬编码版本号本身就是第二个真源。现改为从 README 的 canonical 推导。
 
@@ -146,6 +152,37 @@ def manifest_check(repo_path):
     return (p.returncode, (p.stdout + p.stderr).strip())
 
 
+# 会「以散文形式声明当前 gate 数」的活文档。CHANGELOG.md 故意排除：它是历史记录，
+# 「某次提交当时写了八道门」是对过去为真的陈述，不是当前计数声明 —— 把它算进来会让
+# 门自己误报。这也正是「计数只许出现在一处」（rule 15）要区分的：活件 vs 史件。
+GATE_COUNT_DOCS = ["AGENTS.md", "index.md", "README.md", "docs/start-here.md",
+                   "CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md",
+                   ".github/workflows/gates.yml"]
+# The word list is the single source for the pattern below. A key the regex cannot match is a
+# dead branch: "three|four|five|six" were once registered here but missing from the pattern, so
+# the contributor-facing PR template said "four gates" and no gate saw it.
+_COUNT_WORDS = {"three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+                "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+_COUNT_RE = re.compile(
+    r"\b(%s|[0-9]+)\s+gates?(?![\w-])"
+    % "|".join(sorted(_COUNT_WORDS, key=len, reverse=True)),
+    re.IGNORECASE)
+
+
+def gate_count(repo_path):
+    """gate 数，读自唯一真源 `.githooks/pre-commit`（数 `run "<label>" ...` 调用）。
+
+    为什么数调用而不认字面量：hook 是规格，其它一切提及都必须与它一致。2026-10-07 审计
+    发现两处活文档仍写「seven gates」，而 hook 实际跑了九道 —— 没有任何门在看这个，
+    于是 rule 15（计数只许出现一处）形同虚设。本检查就是给 rule 15 装上牙齿。
+    """
+    text = read(os.path.join(repo_path, ".githooks", "pre-commit"))
+    if text is None:
+        return None
+    return sum(1 for ln in text.splitlines() if ln.lstrip().startswith('run "'))
+
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo-path", default=".")
@@ -213,7 +250,26 @@ def main():
         fails.append("content manifest 与该树不一致（本门禁此前完全不看 manifest，"
                      "v0.1.0 就是这样带着过期 manifest 发布的）")
 
-    # 6) 远程 tag 自洽
+    # 6) gate 计数一致性（rule 15 —— 计数只许出现在一处）
+    n_gates = gate_count(rp)
+    if n_gates is None:
+        fails.append(".githooks/pre-commit 不存在 —— 无法确定 gate 数（真源缺失）")
+    else:
+        for name in GATE_COUNT_DOCS:
+            text = read(os.path.join(rp, name))
+            if text is None:
+                # a listed document that cannot be read is a failure, not a skip (rule 12)
+                fails.append("%s：被列为计数受检文件却读不到（rule 12：跑不起来的检查=失败）"
+                             % name)
+                continue
+            for m in _COUNT_RE.finditer(text):
+                tok = m.group(1).lower()
+                val = int(tok) if tok.isdigit() else _COUNT_WORDS.get(tok)
+                if val is not None and val != n_gates:
+                    fails.append("%s：声明 %s gates，但真源 .githooks/pre-commit 有 %d 道"
+                                 "（rule 15：计数只许出现在一处）" % (name, tok, n_gates))
+
+    # 7) 远程 tag 自洽
     remote_note = "未启用（无仓上下文或 --no-remote）"
     if args.repo and not args.no_remote:
         if not ref:
@@ -246,6 +302,8 @@ def main():
     if mm_code != 0:
         for line in mm_out.splitlines():
             print("      " + line)
+    print("─ gate 计数：%s" % ("✅ 活文档与真源一致（%d 道）" % n_gates if n_gates
+                              else "❌ 真源 .githooks/pre-commit 缺失"))
     print("═ 远程 tag 校验：%s" % remote_note)
 
     if fails:

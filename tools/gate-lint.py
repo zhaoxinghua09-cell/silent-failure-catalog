@@ -537,6 +537,25 @@ RULES["SFL-006"] = {
     "fn": None,
 }
 
+# PARSE is produced by lint_source() itself when a file cannot be parsed, so it has
+# no rule function -- but it must still be registered. Until 2026-10-07 it was not:
+# lint_source() emitted Finding("PARSE", ...) while RULES had no "PARSE" key, so the
+# reporter died with a bare KeyError on the first unparseable file it ever met. That
+# is SF-012 (a failure attributed to the wrong cause) reached by E4 (a path that had
+# never been exercised). A finding's rule id is now required to resolve -- see the
+# PARSE case in cmd_selftest().
+RULES["PARSE"] = {
+    "id": "PARSE",
+    "title": "unparseable",
+    "severity": "high",
+    "confidence": "high",
+    "summary": "The file could not be parsed, so no rule below it could run.",
+    "fix": "Fix the syntax error. Until it parses, every other rule in this tool is "
+           "blind to this file -- an unparseable file is an unchecked file.",
+    "false_positives": "None: reaching this rule means ast.parse raised.",
+    "fn": None,
+}
+
 # --------------------------------------------------------------------------- #
 # Runner
 # --------------------------------------------------------------------------- #
@@ -648,6 +667,35 @@ def cmd_selftest() -> int:
             failed += 1
         else:
             print("  ✅ %-26s clean" % rel)
+
+    # A file that cannot be parsed must produce a PARSE finding whose id resolves in
+    # RULES. This control exists because on 2026-10-07 a real unparseable file made
+    # the reporter crash with KeyError('PARSE') instead of reporting it -- the id was
+    # emitted but never registered. No sample pair covers it, so it needs its own case.
+    broken = "def f(:\n    pass\n"
+    bf, _ = lint_source(broken, Path("<self-test-unparseable>"), None)
+    rids = {f.rid for f in bf}
+    unresolvable = sorted(r for r in rids if RULES.get(r, {}).get("id") != r)
+    if "PARSE" not in rids:
+        print("  🔴 unparseable source        expected PARSE, got %s" % sorted(rids))
+        failed += 1
+    elif unresolvable:
+        print("  🔴 unparseable source        emitted id(s) that do not resolve in "
+              "RULES: %s -- the reporter would crash on them" % unresolvable)
+        failed += 1
+    else:
+        print("  ✅ %-26s fires PARSE (and the id resolves)" % "unparseable source")
+
+    # Registry self-consistency: every rule key must equal the id it declares. A
+    # mismatch is exactly what turned the PARSE crash from a diagnosis into a bare
+    # KeyError -- and the first version of this very control missed it, because it
+    # only asked whether the key *existed*, not whether it *resolved*.
+    mismatched = sorted(k for k, v in RULES.items() if v.get("id") != k)
+    if mismatched:
+        print("  🔴 rule registry            key/id mismatch: %s" % mismatched)
+        failed += 1
+    else:
+        print("  ✅ %-26s every RULES key matches its declared id" % "rule registry")
 
     print()
     if failed:
