@@ -23,6 +23,10 @@
 #      it goes stale the moment the anchor moves (2026-10-07 -- the literal
 #      `--ref v0.1.0` sat in three call sites at once).
 #
+#   2026-10-08: gate 12 joins -- tools/impl-mutation.py systematically mutates
+#   implementation.py itself (five first-order operator classes) and requires
+#   every non-equivalent mutant to be killed by the S5 selftest; the artifact
+#   under test is now watched at the source level, not only around it.
 #   2026-10-07: gate 10 joins -- tools/defect-closure.py reads docs/defect-ledger.json
 #   and fails if any recorded defect is open or missing evidence. It makes "a report
 #   was actually closed out" a checked property, so a correction cannot be answered
@@ -87,6 +91,7 @@ run "release consistency"       tools/verify_release_consistency.py --repo-path 
 run "examples selftest"         examples/T08-S5Q2/simulation.py --selftest
 run "blinded example selftest"  examples/S5-Qregister/simulation.py --selftest
 run "checker mutation"          tools/checker-mutation.py
+run "implementation mutation"   tools/impl-mutation.py
 run "defect closure"            tools/defect-closure.py
 run "defect closure selftest"   tools/defect-closure.py --selftest
 

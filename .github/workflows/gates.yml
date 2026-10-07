@@ -119,15 +119,15 @@ jobs:
         if: always()
         run: python examples/S5-Qregister/simulation.py --selftest
 
-      - name: 9/11 checker-mutation (the checks themselves must be able to fail)
+      - name: 9/12 checker-mutation (the checks themselves must be able to fail)
         if: always()
         run: python tools/checker-mutation.py
 
-      - name: 10/11 defect-closure (every recorded correction is closed with evidence)
+      - name: 10/12 defect-closure (every recorded correction is closed with evidence)
         if: always()
         run: python tools/defect-closure.py
 
-      - name: 11/11 defect-closure selftest (that gate must be able to fail too)
+      - name: 11/12 defect-closure selftest (that gate must be able to fail too)
         if: always()
         run: python tools/defect-closure.py --selftest
 

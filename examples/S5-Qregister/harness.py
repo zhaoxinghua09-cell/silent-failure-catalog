@@ -1035,6 +1035,115 @@ def _survivor_detection_negative_control():
     return []
 
 
+def _decision_point_negative_controls():
+    """Pin the implementation's defensive decision points (S11 support).
+
+    ``tools/impl-mutation.py`` mutates ``implementation.py`` systematically.
+    Its first run found six survivors -- every one a decision point these
+    cases now pin. A mutant that survives after this section exists is a real
+    gap again, which is exactly what the gate is for.
+    """
+    problems = []
+
+    # (1) Exit-code contract. EXIT_PASS must be 0: the subprocess runner
+    # (tools/checker-mutation.py, CI) treats exit 0 as success, so the
+    # numeral is load-bearing, not a style choice.
+    if impl.EXIT_PASS != 0:
+        problems.append("exit-code contract: EXIT_PASS must be 0 (the "
+                        "subprocess runner treats exit 0 as success); got %r"
+                        % (impl.EXIT_PASS,))
+    if impl.EXIT_FAIL == impl.EXIT_PASS:
+        problems.append("exit-code contract: EXIT_FAIL must differ from "
+                        "EXIT_PASS")
+
+    # (2) Missing-timestamp guard: *each* missing timestamp must be refused
+    # (no breach declared, no crash) -- incomplete evidence never declares a
+    # Q6 breach. Pins the ``or``-guard in
+    # implementation._freeze_lands_inside_act_window. Each key gets its own
+    # case: ``(A or B or C) -> (A and B) or C`` is only distinguishable when
+    # exactly one conjunct is None, and only the t_check/t_act cases crash
+    # the mutated comparison.
+    for missing in ("t_check", "t_act", "t_freeze"):
+        base = observables_for("act-window")
+        ts_partial = dict(base.timestamps)
+        ts_partial[missing] = None
+        partial = impl.Observation(
+            current_generation=base.current_generation,
+            source_version=base.source_version,
+            source_available=base.source_available,
+            freeze_state=base.freeze_state,
+            supersession_lineage=base.supersession_lineage,
+            timestamps=ts_partial,
+            authority_state=base.authority_state,
+            binding_tokens=base.binding_tokens,
+        )
+        try:
+            if impl._freeze_lands_inside_act_window(partial):
+                problems.append(
+                    "missing %s: the window test declared a breach from "
+                    "incomplete observations -- silence would let a missing "
+                    "probe read as 'no breach'" % (missing,))
+        except TypeError:
+            problems.append(
+                "missing %s: the window test crashed on an incomplete "
+                "observation instead of refusing it" % (missing,))
+
+    # (3) Freeze-window boundary: a freeze effective exactly at the check or
+    # exactly at the actuation lands INSIDE the window (the comparison is
+    # <=, not <). Both boundary equalities are pinned; an off-by-one at
+    # either end silently reopens the binding.
+    ts = dict(base.timestamps)
+    at_check = impl.Observation(
+        current_generation=base.current_generation,
+        source_version=base.source_version,
+        source_available=base.source_available,
+        freeze_state=base.freeze_state,
+        supersession_lineage=base.supersession_lineage,
+        timestamps=dict(ts, t_freeze=ts["t_check"]),
+        authority_state=base.authority_state,
+        binding_tokens=base.binding_tokens,
+    )
+    if not impl._freeze_lands_inside_act_window(at_check):
+        problems.append("freeze-window boundary: a freeze effective exactly "
+                        "at check time was not counted as inside the window")
+    at_act = impl.Observation(
+        current_generation=base.current_generation,
+        source_version=base.source_version,
+        source_available=base.source_available,
+        freeze_state=base.freeze_state,
+        supersession_lineage=base.supersession_lineage,
+        timestamps=dict(ts, t_freeze=ts["t_act"]),
+        authority_state=base.authority_state,
+        binding_tokens=base.binding_tokens,
+    )
+    if not impl._freeze_lands_inside_act_window(at_act):
+        problems.append("freeze-window boundary: a freeze effective exactly "
+                        "at actuation time was not counted as inside the "
+                        "window")
+
+    # (4) Source-unavailable behaviour, per profile. The "ambiguity" branch
+    # (source_available=False) exists in the fixture table, but only the
+    # profile that is *designed* to see it was ever run against it; feeding
+    # it to every profile pins each one's defensive guard.
+    amb = observables_for("ambiguity")
+    _exit_i1, v_i1 = impl.run("I1-defended", amb)
+    if not any(g == "Q3" and "live source unavailable" in (t or "")
+               for g, s, t in v_i1.lines):
+        problems.append("I1-defended on a source-unavailable observation: "
+                        "the source-unavailable trace line ('live source "
+                        "unavailable') did not appear -- the profile's "
+                        "source guard is dead code")
+    _exit_i2, v_i2 = impl.run("I2-complete", amb)
+    if v_i2.guard_decision != impl.GUARD_HOLD:
+        problems.append("I2-complete on a source-unavailable observation: "
+                        "expected bounded HOLD, got %r" % (v_i2.guard_decision,))
+    if not any(g == "Q3" and s == "SOURCE_ABSENT" for g, s, _ in v_i2.lines):
+        problems.append("I2-complete on a source-unavailable observation: "
+                        "the SOURCE_ABSENT evidence line did not appear")
+
+    return problems
+
+
 def selftest():
     """Assert the register, the blinding, and the mutation suite.
 
@@ -1066,6 +1175,7 @@ def selftest():
     problems.extend(_self_report_negative_control())
     problems.extend(_row4_negative_control())
     problems.extend(_survivor_detection_negative_control())
+    problems.extend(_decision_point_negative_controls())
 
     # Blinding: the runner must not be able to see which branch it is on.
     problems.extend(_assert_blind())

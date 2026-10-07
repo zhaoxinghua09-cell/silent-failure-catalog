@@ -119,6 +119,26 @@ Two mechanical consequences follow, and they are the two most useful rules in th
 1. **Missing must enter the exit code.** If "required but absent" is recorded as a neutral note — a log line, a `⚪`, a skip, a warning — then a required-but-absent state produces `exit 0`. The gate is blind exactly where it matters most.
 2. **No negative control means no evidence.** A check that has never been observed failing has not been shown to be capable of failing. *Every negative result needs a positive control.*
 
+## Validity qualification, trust boundaries, and how this differs from adjacent work
+
+**Qualification of the example verifications (read this before citing any "green" in this repo).**
+The runnable examples (`examples/T08-S5Q2`, `examples/S5-Qregister`) verify an *agentic-control simulation*, not a product execution. Their fixtures and reference sets were drafted by the same authors as the implementation, so the oracle is **not independent** of the implementer; the fixture is bounded (a handful of branches, a bounded register of required preconditions), and the reference set's completeness is a *stipulated* assumption, not a derived one. Independence evidence currently comes only from structural blinding, negative controls, mutation of the checks themselves, and external review (FG-TIDA `use-cases#21`, rounds 2026-09-30 / 10-05 / 10-07). This is a qualification the reviewers explicitly asked to keep, and it applies to every claim below.
+
+> EN: *All example results hold on a bounded, self-authored fixture; the oracle shares provenance with the implementation; independence evidence is limited to negative controls, check mutation, metamorphic relations, and external review. These results do not constitute a specification-completeness proof, and the S5/T08 walkthroughs remain model results rather than executed product tests.*
+>
+> 中文：*示例全部结论均在一个由实现作者起草的有界 fixture 上得出；oracle 与实现同源；独立性证据仅来自负控、检查器变异、变形关系与外部评审。以上不构成规格完备性证明；S5/T08 走查仍是模型结果而非真实产品执行。*
+
+**Are the negative controls themselves alive?**
+The checker-mutation gate (`tools/checker-mutation.py`) mutates this repo's own checks and requires each mutation to break a selftest, with two sentinels: `SENTINEL-inert` (a purely textual change that *must survive* — if the tool reports it killed, the tool is lying) and `SENTINEL-fatal` (a change that *must die* — if the tool reports it survived, the tool is blind). What the sentinels cover: the mutation engine's ability to see real failures and to not fabricate them. What they do not cover: an *equivalent* mutation misjudged as a test gap (undecidable in general — see below), or a compromised execution base.
+
+**How often, and on what trusted base?**
+The full gate suite runs on every commit (`.githooks/pre-commit`) and is mirrored gate-for-gate in CI (`.github/workflows/gates.yml`). The CI runner is an **assumed trusted execution base** — this assumption is declared, not proven. As with the manifest: the gates prove properties of this tree; they do not prove the integrity of the machine they run on.
+
+**How this differs from adjacent work** (stated because reviewers will ask):
+- *Judge calibration sets* (e.g., Anthropic's evals guidance: 5–10 known-good/bad samples) monitor a judge's discrimination with a static sample. Negative controls here are systematic and enumerable: every check must be shown able to fail against injected faults, and the injection points cover the control semantics (freezes, supersession, binding), not just the judge.
+- *Harness-attack audits* (e.g., UC Berkeley's trustworthy-benchmarks work, which showed 13 agent benchmarks can be manipulated to 100%) demonstrate that "all green" can be manufactured. They attack the harness; this repo's gates are the defensive counterpart — proving checks can detect the faults they claim to detect. Complementary, not competing.
+- *Pass^k reliability* (τ-bench) measures the agent under test. This catalog measures the **verification chain** — the prerequisite: an unverified pass rate may itself be a harness artifact.
+
 ## Quick start
 
 ```bash
