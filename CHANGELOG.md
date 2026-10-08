@@ -54,6 +54,16 @@ Gates 9 and 10, three new hard rules, and the closure of an external review roun
 - `gate-lint.py` crashed with `KeyError: 'PARSE'` on an unparseable file (the `PARSE` finding
   was emitted but never registered in `RULES`). Covered by a new selftest case.
 - `defect-closure.py` no longer fails open when the hook cannot be read.
+- **gate 14/15 could not fail for a whole family of edits** (D-024), found by an independent
+  review seat that mutated copies of the repository rather than reading the tool. Three edits
+  applied symmetrically to both lists — the same gate dropped from both lists with the labels
+  renumbered, added to both lists, or given different arguments on both sides — all left the
+  gate green, while the declared `Known limit` covered only the first. A fourth check now
+  rejects a repeated `(script, arguments)` pair in either list, which closes the duplication
+  shape without the second registry the gate had ruled out. The two remaining shapes are
+  stated in `Known limit` together with the measurement showing that the `N/M` label
+  discipline does not cover them, and the docstring no longer claims it does. `--selftest`
+  goes from 10 controls to 11.
 
 ## [0.1.1] — 2026-10-07
 

@@ -21,6 +21,10 @@ What it checks
      matching, so the divergence cannot silently widen; and an exception that
      no longer describes a real difference is reported as stale, so the list
      cannot accumulate lies.
+  4. Neither list runs the same (script, arguments) pair twice. The same script
+     with different arguments is fine -- `check-catalog.py` runs twice on
+     purpose; the same pair twice is a duplicate, and a duplicate added to both
+     lists is the one symmetric edit a local invariant can still see.
 
 What it does not check
   * The `negative-control` job. It is a separate job with deliberately
@@ -29,12 +33,30 @@ What it does not check
     `gate-lint.py` for the ones that do not carry one.
 
 Known limit
-  A gate deleted from *both* lists cannot be caught here: if both sides drop the
-  same entry, they still agree. Catching that would need a second registry of
-  "expected" gates, which is a second source of truth of exactly the kind this
-  repository removes elsewhere (AGENTS.md rule 15). What remains over that hole
-  is the `N/M` label discipline, the reviewer, and branch protection on the CI
-  job -- all of them weaker than a gate, and stated here rather than implied.
+  An edit applied to *both* lists at once cannot be caught by check 1, because
+  both sides still agree. Three shapes were measured on 2026-10-08 (independent
+  review, 14 mutated copies); all three came back green:
+
+    * the same gate dropped from both lists, labels renumbered;
+    * the same gate added to both lists (copy-paste);
+    * the same gate's arguments changed on both sides.
+
+  The second is now caught by check 4, which needs no second registry: running
+  a gate twice is a local contradiction. The first and third are not closable
+  that way -- the `N/M` labels live *inside* one of the two lists, so they move
+  with it. Measured, and this is the part that matters: dropping a gate from
+  both lists and renumbering stays green, while dropping it and *forgetting* to
+  renumber is caught. The label discipline therefore defends against the
+  careless edit, not against the careful one -- and the careful edit is what
+  the labels exist to encourage. Counting on it would be counting on the editor
+  to slip.
+
+  Closing the first and third shapes properly needs a single source of gates
+  with both lists generated from it, so that "the two sides agree" stops being
+  evidence of anything. That is a larger change and lives outside this file
+  (P2 in the workspace diagnosis). Until then, what remains over those two
+  holes is the reviewer and branch protection on the CI job -- weaker than a
+  gate, and stated here rather than implied.
 
 Reading `gates.yml`
   This repository is stdlib-only and Python ships no YAML parser, so the
@@ -255,6 +277,40 @@ def check_parity(
     return problems
 
 
+def check_unique(
+    hook: "list[tuple[int, str, tuple]]",
+    ci: "list[tuple[int, str, str, tuple]]",
+) -> "list[str]":
+    """Neither list may run the same (script, arguments) pair more than once.
+
+    A gate duplicated in one list and then in the other leaves the two lists in
+    perfect agreement, so check 1 cannot see it. This one can, and it needs no
+    second registry of expected gates: running a gate twice is a contradiction
+    inside the list itself. It is the only shape of a symmetric edit that is
+    locally decidable, which is exactly why it is worth a check.
+
+    The same *script* with different arguments stays legal and expected --
+    `check-catalog.py` runs twice, once for the catalog and once for leaks.
+    """
+    problems = []
+    sides = (
+        ("the hook", [(script, args) for _, script, args in hook]),
+        ("CI", [(script, args) for _, _, script, args in ci]),
+    )
+    for side, pairs in sides:
+        first_seen = {}
+        for position, key in enumerate(pairs, 1):
+            if key in first_seen:
+                problems.append(
+                    "%s runs %s %s twice (steps %d and %d); the second is a "
+                    "duplicate, not a gate"
+                    % (side, key[0], list(key[1]), first_seen[key], position)
+                )
+            else:
+                first_seen[key] = position
+    return problems
+
+
 # --------------------------------------------------------------------------- #
 # Self test: every check must be shown able to fail.
 # --------------------------------------------------------------------------- #
@@ -326,14 +382,19 @@ def _run_case(name, hook_pairs, ci_pairs, expect_problems, exceptions=None, **ci
     hook = parse_hook(_hook_text(hook_pairs))
     ci = parse_ci(_ci_text(ci_pairs, **ci_kw))
     exc = list(EXCEPTIONS) if exceptions is None else exceptions
-    problems = check_parity(hook, ci, exceptions=exc) + check_labels(ci)
+    problems = check_parity(hook, ci, exceptions=exc) + check_labels(ci) + check_unique(hook, ci)
     got = len(problems) > 0
     ok = got == expect_problems
     return ok, name, expect_problems, problems
 
 
 def selftest() -> int:
-    """Prove every check can fail: three green controls, five red controls."""
+    """Prove every check can fail: each control states the verdict it wants.
+
+    No count is written here. The number of controls is printed from `cases`,
+    and a number typed into a comment is a second source that only the code can
+    keep true -- which is the drift this gate exists to catch.
+    """
     cases = []
 
     # --- green controls: these must stay silent ---
@@ -386,7 +447,7 @@ def selftest() -> int:
     # An exception that no longer describes a difference is a stale claim.
     hook = parse_hook(_hook_text([("tools/verify_release_consistency.py", ("--repo-path", ".", "--no-remote"))]))
     ci = parse_ci(_ci_text([("tools/verify_release_consistency.py", ("--repo-path", ".", "--no-remote"))]))
-    stale = check_parity(hook, ci, exceptions=list(EXCEPTIONS)) + check_labels(ci)
+    stale = check_parity(hook, ci, exceptions=list(EXCEPTIONS)) + check_labels(ci) + check_unique(hook, ci)
     cases.append((len(stale) > 0, "a stale exception is reported", True, stale))
 
     # A step with no label at all in an otherwise well-formed file.
@@ -399,6 +460,17 @@ def selftest() -> int:
             hide_label_at=1,
         )
     )
+
+    # Dead control for check 4. The same gate is appended to *both* lists, which
+    # is precisely the symmetric edit check 1 is blind to; check 4 must see it.
+    # If this control ever passes green, check 4 is decoration.
+    dup = list(BASE) + [BASE[0]]
+    cases.append(
+        _run_case("the same gate twice in both lists", dup, dup, True)
+    )
+    # ...and the guard against over-tightening it: BASE already runs
+    # check-catalog.py twice with different arguments, and the green control
+    # above covers it. A check that flagged that would be the wrong check.
 
     failures = 0
     for ok, name, expected_red, problems in cases:
@@ -460,7 +532,7 @@ def main(argv: "list[str] | None" = None) -> int:
         )
         return 1
 
-    problems = check_parity(hook, ci) + check_labels(ci)
+    problems = check_parity(hook, ci) + check_labels(ci) + check_unique(hook, ci)
     if problems:
         print("gate-parity: the hook and CI have drifted.", file=sys.stderr)
         for p in problems:
