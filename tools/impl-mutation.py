@@ -282,6 +282,7 @@ def main():
     failures = []
     killed = timeout_killed = survived = 0
     survivors = []
+    survived_ids = set()   # v1.1: ids actually observed to survive
 
     # Grounding, alongside SENTINEL-noop / SENTINEL-fatal: the runner must be
     # watching the artifact rather than a cached copy of it. Run first, so a
@@ -312,13 +313,13 @@ def main():
             if args.verbose:
                 print("  + %-12s %s" % (mut_id, res["result"]))
         else:
+            survived += 1
+            survived_ids.add(mut_id)
             if mut_id in EXEMPT_SURVIVAL:
-                survived += 1
                 print("  ~ %-12s survived (exempt: %s)"
                       % (mut_id, EXEMPT_SURVIVAL[mut_id]))
             else:
                 survivors.append((mut_id, old, new, res["tail"]))
-                survived += 1
 
     # SENTINEL-fatal: pick the first CMP mutant and require it to die.
     # (The CMP class attacks the ruling comparisons; if the pipeline cannot
@@ -334,7 +335,15 @@ def main():
             print("  + %-12s %s (SENTINEL-fatal ok)"
                   % (mut_id, "timeout" if res["result"] == "timeout" else "killed"))
         elif mut_id in [x[0] for x in survivors]:
-            print("  + %-12s killed (counted above; SENTINEL-fatal ok)" % mut_id)
+            # v1.1: this used to print "killed (counted above)" -- i.e. it
+            # claimed the sentinel died while the same id sat in the survivor
+            # list. Two contradictory readings of one mutant cannot both be
+            # true, and the old branch swallowed the contradiction into a
+            # success line. Reported by T-n-Nelson, use-cases#21 (2026-10-08).
+            failures.append(
+                "SENTINEL-fatal: mutation %s survived the main sweep yet the "
+                "sentinel branch reported it killed -- the gate is printing a "
+                "verdict it did not observe." % mut_id)
         else:
             failures.append(
                 "SENTINEL-fatal: mutation %s survived -- the pipeline cannot "
@@ -351,23 +360,50 @@ def main():
     # "ignored" status): an equivalent mutant cannot be killed by any test,
     # so counting it against the score would measure the fixture, not the
     # suite. Every exclusion is an explicit, inspected EXEMPT_SURVIVAL entry.
+    # v1.1: an exemption may only shrink the denominator when that mutant was
+    # actually observed to survive. Previously any id listed in
+    # EXEMPT_SURVIVAL was subtracted unconditionally, so a stale entry kept
+    # shrinking the denominator (and raising the score) even when its mutant
+    # was killed. Reported by T-n-Nelson, use-cases#21 (2026-10-08).
     exempt_n = sum(1 for m in mutants
-                   if m[0] in EXEMPT_SURVIVAL and m[3] != m[4])
+                   if m[0] in EXEMPT_SURVIVAL and m[3] != m[4]
+                   and m[0] in survived_ids)
     denom = real_mutants - exempt_n
-    score = (killed + timeout_killed) / denom if denom else 0.0
+    # v1.1: `killed` already counts timeout kills -- they are a subset, not a
+    # second population. Adding T to K again counted every timeout twice and
+    # could print a score above 1.000 (K=11, T=1, denom=11 gave 1.091).
+    score = killed / denom if denom else 0.0
     print("-" * 70)
     print("  killed %d (incl. %d timeout) | disclosed-equivalent survivor %d "
           "| real mutants %d"
           % (killed, timeout_killed, survived, real_mutants))
     print("  mutation score (equivalents excluded)  -> %.3f (break >= %.2f)"
           % (score, BREAK_THRESHOLD))
-    raw = (killed + timeout_killed) / real_mutants if real_mutants else 0.0
+    raw = killed / real_mutants if real_mutants else 0.0
     print("  raw kill ratio (all real mutants)      -> %d/%d = %.3f"
-          % (killed + timeout_killed, real_mutants, raw))
+          % (killed, real_mutants, raw))
     if survivors:
         print("  NON-EXEMPT SURVIVORS (%d):" % len(survivors))
         for mut_id, old, new, tail in survivors:
             print("    %s : %r -> %r   [%s]" % (mut_id, old, new, tail))
+    # v1.1: the gate's own verdict says every non-exempt mutant must be killed.
+    # Printing survivors while deciding purely on the score threshold let the
+    # gate pass with a live survivor in hand (e.g. K=10, T=0, denom=11 gives
+    # 0.909 >= 0.90 alongside one survivor). A listed survivor is now itself a
+    # failure, independently of the score. Reported by T-n-Nelson, #21.
+    if survivors:
+        failures.append(
+            "NON-EXEMPT SURVIVORS (%d): %s -- the gate requires every "
+            "non-exempt mutant to be killed; a survivor is a failure on its "
+            "own, not a line of commentary."
+            % (len(survivors), ", ".join(m for m, _o, _n, _t in survivors)))
+    # v1.1: a kill ratio cannot exceed 1. A score above it means the numerator
+    # and denominator are counted on different terms.
+    if score > 1.0 + 1e-9:
+        failures.append(
+            "mutation score %.3f > 1.000 -- impossible for a ratio of kills to "
+            "mutants; the numerator and denominator are no longer counted on "
+            "the same terms." % score)
     if score < BREAK_THRESHOLD:
         failures.append("mutation score %.3f < break threshold %.2f"
                         % (score, BREAK_THRESHOLD))
@@ -376,9 +412,8 @@ def main():
         for f in failures:
             print("  FAIL %s" % f)
         return 1
-    print("S11 PASSED: baseline green; sentinels grounded; every non-exempt "
-          "first-order mutant of implementation.py is killed by the selftest; "
-          "score %.3f >= %.2f." % (score, BREAK_THRESHOLD))
+    print("S11 PASSED: baseline green; sentinels grounded; non-exempt "
+          "survivors 0; score %.3f >= %.2f." % (score, BREAK_THRESHOLD))
     return 0
 
 
