@@ -37,7 +37,7 @@ Then update, in the same commit:
 5. `CHANGELOG.md` — one line under `Unreleased`
 6. `manifest.sha256` and `INTEGRITY.md` — run `python tools/make-manifest.py`
 
-Pull requests that add an entry without updating all six will fail CI.
+Pull requests that add an entry without updating items 1–4 and 6 will fail CI. Item 5 is the exception: `check_changelog` in `tools/check-catalog.py` verifies only that `CHANGELOG.md` exists and carries a semantic version, so a missing `Unreleased` line is not caught mechanically — that one is a manual discipline, and saying otherwise would be exactly the kind of over-claim this catalog records.
 
 If you are not sure you have a pattern yet — symptoms without a reproduction are still worth reporting — read [`SUPPORT.md`](SUPPORT.md) first. And if you would rather attack the tooling than extend the catalog, [`docs/take-the-challenge.md`](docs/take-the-challenge.md) has three tiers for that, starting at five minutes.
 

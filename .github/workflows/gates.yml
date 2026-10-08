@@ -87,47 +87,47 @@ jobs:
       # `if: always()` on every gate, so that a failure in one does not hide the state
       # of the others. The job is red if any gate failed, and the report is the
       # complete list rather than the first casualty.
-      - name: 1/12 gate-lint --selftest
+      - name: 1/13 gate-lint --selftest
         if: always()
         run: python tools/gate-lint.py --selftest
 
-      - name: 2/12 check-catalog --selftest
+      - name: 2/13 check-catalog --selftest
         if: always()
         run: python tools/check-catalog.py --selftest
 
-      - name: 3/12 check-catalog (indexes, the six targets, link discipline)
+      - name: 3/13 check-catalog (indexes, the six targets, link discipline)
         if: always()
         run: python tools/check-catalog.py
 
-      - name: 4/12 check-catalog --scan-leaks
+      - name: 4/13 check-catalog --scan-leaks
         if: always()
         run: python tools/check-catalog.py --scan-leaks
 
-      - name: 5/12 make-manifest --check
+      - name: 5/13 make-manifest --check
         if: always()
         run: python tools/make-manifest.py --check
 
-      - name: 6/12 release-consistency (canonical anchor resolves · manifest matches)
+      - name: 6/13 release-consistency (canonical anchor resolves · manifest matches)
         if: always()
         run: python tools/verify_release_consistency.py --repo-path . --repo "${{ github.repository }}"
 
-      - name: 7/12 examples selftest (T08-S5Q2 cases + mutation suite)
+      - name: 7/13 examples selftest (T08-S5Q2 cases + mutation suite)
         if: always()
         run: python examples/T08-S5Q2/simulation.py --selftest
 
-      - name: 8/12 examples selftest (S5-Qregister blinded run + mutation suite)
+      - name: 8/13 examples selftest (S5-Qregister blinded run + mutation suite)
         if: always()
         run: python examples/S5-Qregister/simulation.py --selftest
 
-      - name: 9/12 checker-mutation (the checks themselves must be able to fail)
+      - name: 9/13 checker-mutation (the checks themselves must be able to fail)
         if: always()
         run: python tools/checker-mutation.py
 
-      - name: 10/12 defect-closure (every recorded correction is closed with evidence)
+      - name: 10/13 defect-closure (every recorded correction is closed with evidence)
         if: always()
         run: python tools/defect-closure.py
 
-      - name: 11/12 defect-closure selftest (that gate must be able to fail too)
+      - name: 11/13 defect-closure selftest (that gate must be able to fail too)
         if: always()
         run: python tools/defect-closure.py --selftest
 
@@ -136,9 +136,19 @@ jobs:
       # every non-equivalent mutant to be killed by the S5 selftest, reporting
       # a mutation score against a break threshold. Closes review round 3's
       # "mutations around, not of, the implementation".
-      - name: 12/12 implementation-mutation (source-level watch on the artifact under test)
+      - name: 12/13 implementation-mutation (source-level watch on the artifact under test)
         if: always()
         run: python tools/impl-mutation.py
+
+      # Gate 13: tools/check-line-endings.py scans the INDEX blobs for CRLF.
+      # `.gitattributes` is `* -text`, so git normalizes nothing at all; a CRLF
+      # file enters the index, is committed, and every digest still matches,
+      # because the bytes are byte-exact on checkout. The check reads the index
+      # and never the working tree -- an LF working tree looks green while the
+      # index still holds the CRLF that the next commit would record (D-021).
+      - name: 13/13 line endings (the index carries no CRLF)
+        if: always()
+        run: python tools/check-line-endings.py
 
   negative-control:
     # The job *name* is load-bearing and must not be edited on its own. Branch protection

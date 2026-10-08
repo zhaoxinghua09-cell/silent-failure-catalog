@@ -289,6 +289,34 @@
       "evidence": "At the pre-fix revision, on one machine and one interpreter, removing PYTHONDONTWRITEBYTECODE reproduces the CI reading exactly (killed 9, score 0.818, exit 1); restoring it returns killed 11 / 1.000. With the fix in place the same cache-enabled condition reports killed 11 / 1.000 and the bytecode-cache control stays quiet, and it fires when the cache is deliberately allowed back -- so the control is load-bearing rather than decorative.",
       "siblings_scanned": true,
       "closed": true
+    },
+    {
+      "id": "D-021",
+      "date": "2026-10-08",
+      "source": "self-test",
+      "symptom": "Seven files sat in the index with CRLF line endings and nothing in the toolchain objected. `.gitattributes` is `* -text`, so git performs no end-of-line conversion at all: the bytes are byte-exact on checkout, every manifest digest matches, and the run in which a CRLF was committed is indistinguishable from the run in which none was. The most consequential of the seven was `.githooks/pre-commit` itself -- a `#!/bin/sh` script the Linux shell (dash) refused with `set: Illegal option -`, so on the platform CI uses the gate list could not run at all. The commit that carried them, fc86dc5, was titled 'line-ending normalization' while its own tree still held seven CRLF blobs.",
+      "class": "SF-006",
+      "escape_cause": "E1",
+      "found_by": "this round, when the hook was copied into a Linux container to be re-run after CI failed at gate 12 -- the copy is what exposed the line endings",
+      "root_cause": "No gate looked at line endings anywhere. `-text` is required by the byte manifest (a converted checkout would produce different bytes on Windows and Linux, so every digest would differ by platform), but the same setting removes git's only automatic normalisation, so a CRLF is committed silently and every existing gate stays green. The property was asserted in a commit subject and enforced by nothing.",
+      "gate_added": "gate 13 runs tools/check-line-endings.py, which reads the INDEX blobs (git ls-files -s, then git cat-file blob) rather than the working tree, skips NUL-bearing blobs, prints path:line for each CRLF and exits non-zero on any hit; it is wired into .githooks/pre-commit and .github/workflows/gates.yml, and the six blobs still dirty at fc86dc5 were normalised to LF in the same pass.",
+      "evidence": "--selftest carries four controls and all four fire: a committed CRLF file is reported with a non-zero exit, a pure-LF repository passes silently, a CRLF hidden behind an LF working tree is still reported (the divergence control -- the shape a working-tree reader would miss), and a NUL-bearing blob is skipped. On this repository it prints 'OK: 70 file(s) in the index, no CRLF', because the seven blobs were normalised before the gate landed.",
+      "siblings_scanned": true,
+      "closed": true
+    },
+    {
+      "id": "D-022",
+      "date": "2026-10-08",
+      "source": "self-test",
+      "symptom": "The D-020 fix was copied into tools/checker-mutation.py on the strength of the class label alone, and the comment written with it asserted that this tool 'is exposed to the same window'. It is not. Measured on 2026-10-08: harness.py is executed as the __main__ script, so no harness bytecode file is produced for the file this gate rewrites; with the bytecode cache enabled a same-size mutant pinned to the same whole second is still killed, and removing the isolation by patch changes not one verdict (S9 stays green). A necessity that had never been measured was written down as fact -- in a repository whose rule 10 exists because of this exact mistake (D-010).",
+      "class": "SF-012",
+      "escape_cause": "E2",
+      "found_by": "this round, while trying to give the tool the self-probe dead control that had been authorised -- testing first whether such a control could fire, which is what showed the claim under it was false",
+      "root_cause": "The sibling sweep was run on the class label instead of the mechanism. 'Writes a file, then runs it through a child interpreter' matched, so the fix was copied; but masking also requires the rewritten file to be IMPORTED, because only imported modules get a bytecode cache -- a file run as __main__ is compiled fresh every time. Nothing in the repository requires a necessity claim to be measured, and an untested claim reads exactly like a tested one.",
+      "gate_added": "the comment in tools/checker-mutation.py now records the measurement instead of the assumption, and the isolation is kept and labelled belt-and-braces rather than presented as a closure. The proposed self-probe was deliberately withheld: the experiment above showed it could never fire, so it would have been a decorative control -- the very defect this ledger exists to record.",
+      "evidence": "Two readings on one machine and one interpreter. With the cache enabled the scratch package produces only the imported module's bytecode file and no harness one; a same-size mutant pinned to the same whole second exits 1 (killed) under both cache conditions; and the full gate returns exit 0 either way, including when its isolation is removed by patch (the run opened with 'baseline selftest (unmutated) -> PASS' and closed with 'S9 PASSED').",
+      "siblings_scanned": true,
+      "closed": true
     }
   ]
 }

@@ -185,17 +185,19 @@ EXEMPT_SURVIVAL = {
     "NEG-coherence": "removal is caught by the second-order layer, not by selftest",
 }
 
-# The child interpreters must not write a bytecode cache.
+# The child interpreters do not write a bytecode cache.
 #
-# Same class as the fix in tools/impl-mutation.py (2026-10-08): CPython
-# validates a `.pyc` against (source mtime truncated to *whole seconds*,
-# source size). A mutation that keeps the file size and lands in the same
-# second as the previous run leaves both fields unchanged, so the child
-# re-executes the stale bytecode built from the *unmutated* source and a
-# watched mutation is scored as surviving. That gate reported killed 11 with
-# PYTHONDONTWRITEBYTECODE exported and killed 9 (the CI reading) without it --
-# same commit, same machine, same interpreter; this tool rewrites harness.py
-# the same way and is exposed to the same window, so it is closed here too.
+# This is a belt-and-braces setting, not a fix for a defect measured here. The
+# class is real -- tools/impl-mutation.py was genuinely red in CI because a
+# same-size mutant written back inside the same second left (mtime truncated to
+# whole seconds, size) unchanged, so the child re-executed stale bytecode
+# compiled from the unmutated source (D-020). It does not reach this tool, and
+# that was measured rather than assumed (2026-10-08, D-022): harness.py is
+# executed as the __main__ script, so no `harness.cpython-*.pyc` is produced for
+# the file this gate rewrites, and a same-size mutant pinned to the same whole
+# second is still killed with the cache enabled. An earlier revision of this
+# comment claimed the exposure applied "the same way"; it did not, and the claim
+# is corrected here rather than left standing.
 NO_BYTECODE = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
 
 # One scratch package, prepared once and rewritten per variant. Nothing is
@@ -211,9 +213,10 @@ def run_variant(source, verbose=False):
     Returns (passed: bool, tail: str).
     """
     # newline="" keeps the scratch artifact byte-identical across platforms --
-    # a stated property of this repository, not the fix for the stale cache;
-    # NO_BYTECODE stops the child from WRITING a .pyc, and there is none to
-    # read because the scratch tree is copied with __pycache__ ignored.
+    # a stated property of this repository, not the fix for the stale cache.
+    # NO_BYTECODE stops the child from writing a .pyc; for harness.py there is
+    # none to read either way (it runs as __main__), and the scratch tree is
+    # copied with __pycache__ ignored so imported modules start cold too.
     with open(os.path.join(PKG, "harness.py"), "w", encoding="utf-8",
               newline="") as fh:
         fh.write(source)

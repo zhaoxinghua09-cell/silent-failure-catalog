@@ -23,6 +23,13 @@
 #      it goes stale the moment the anchor moves (2026-10-07 -- the literal
 #      `--ref v0.1.0` sat in three call sites at once).
 #
+#   2026-10-08: gate 13 joins -- tools/check-line-endings.py scans the INDEX
+#   blobs for CRLF. `.gitattributes` is `* -text`, so git performs no
+#   end-of-line conversion at all: without this gate a CRLF file enters the
+#   index, is committed, and every manifest digest still matches, because the
+#   bytes are byte-exact on checkout. It reads the index and never the working
+#   tree -- a tree normalized to LF looks green while the index still holds the
+#   CRLF the next commit would record (D-021).
 #   2026-10-08: gate 12 joins -- tools/impl-mutation.py systematically mutates
 #   implementation.py itself (five first-order operator classes) and requires
 #   every non-equivalent mutant to be killed by the S5 selftest; the artifact
@@ -94,6 +101,7 @@ run "checker mutation"          tools/checker-mutation.py
 run "defect closure"            tools/defect-closure.py
 run "defect closure selftest"   tools/defect-closure.py --selftest
 run "implementation mutation"   tools/impl-mutation.py
+run "line endings"              tools/check-line-endings.py
 
 if [ "$fail" -ne 0 ]; then
     echo "" >&2
