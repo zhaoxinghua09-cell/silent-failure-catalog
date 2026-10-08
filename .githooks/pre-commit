@@ -22,7 +22,24 @@
 #      ref out of README.md. A hard-coded tag here is a second source of truth, and
 #      it goes stale the moment the anchor moves (2026-10-07 -- the literal
 #      `--ref v0.1.0` sat in three call sites at once).
+#   6. THIS LIST IS THE ONLY PLACE A GATE IS DESCRIBED. Every `run` line carries
+#      the gate's name and, in the second field, the parenthetical that the CI
+#      step will show. `.github/workflows/gates.yml` no longer holds a hand-
+#      written copy of these steps; the block there is generated from this file
+#      and gate 15 fails if the two disagree (see the 2026-10-08 entry below).
 #
+#   2026-10-08: the CI step block is now GENERATED from this file. Before this,
+#   the two lists were two hand-written copies, and the shapes that defeated the
+#   comparison were measured -- a gate added to both lists, a gate's arguments
+#   changed on both sides, a gate deleted from both and the labels renumbered.
+#   Generating the CI side closes the first two structurally: there is no longer
+#   a place to add a gate that this file does not have.
+#   WHAT IT DOES NOT CLOSE, stated plainly: a gate deleted from THIS file and
+#   then regenerated is still invisible, because both sides agree again -- the
+#   comparison only ever sees one source. Closing that needs a second registry
+#   of expected gates, which is the second source of truth this repository
+#   forbids. Measured as control N7 in tools/check-gate-parity.py --selftest;
+#   that control is expected to stay green, and it is not a selling point.
 #   2026-10-08: gates 14 and 15 join -- tools/check-gate-parity.py is the first
 #   gate that watches the gate list itself. This hook is the specification and
 #   `.github/workflows/gates.yml` is its echo, but nothing compared the two:
@@ -32,8 +49,8 @@
 #   cannot fail would be that same defect again. Gate 15 compares the two real
 #   lists and fails on a missing gate, a changed argument, or a stale `N/M`
 #   label. The single declared difference (gate 6 runs offline here and with an
-#   API token in CI) is an exact tuple, so editing either side breaks the
-#   exception instead of quietly widening it.
+#   API token in CI) is written as a `# ci-only:` override on gate 6, so editing
+#   either side breaks the override instead of quietly widening it.
 #   2026-10-08: gate 13 joins -- tools/check-line-endings.py scans the INDEX
 #   blobs for CRLF. `.gitattributes` is `* -text`, so git performs no
 #   end-of-line conversion at all: without this gate a CRLF file enters the
@@ -85,8 +102,14 @@ fi
 
 fail=0
 
+# run <name> <ci-note> <script> [args...]
+#
+#   <name>     shown when this gate fails, and used verbatim as the CI step name
+#   <ci-note>  the CI step's parenthetical, or "" when the name says enough.
+#              Consumed here and not printed: it exists so that the whole
+#              description of a gate lives on the gate's own line.
 run() {
-    label="$1"; shift
+    name="$1"; shift 2
     script="$1"; shift
     if [ ! -f "$script" ]; then
         echo "pre-commit: FAIL — $script is missing. A gate that is not there is not a gate." >&2
@@ -94,27 +117,34 @@ run() {
         return
     fi
     if ! out=$("$py" "$script" "$@" 2>&1); then
-        echo "pre-commit: FAIL — $label" >&2
+        echo "pre-commit: FAIL — $name" >&2
         printf '%s\n' "$out" | sed 's/^/    /' >&2
         fail=1
     fi
 }
 
-run "gate-lint selftest"        tools/gate-lint.py     --selftest
-run "catalog selftest"          tools/check-catalog.py --selftest
-run "catalog consistency"       tools/check-catalog.py
-run "de-identification scan"    tools/check-catalog.py --scan-leaks
-run "content manifest"          tools/make-manifest.py --check
-run "release consistency"       tools/verify_release_consistency.py --repo-path . --no-remote
-run "examples selftest"         examples/T08-S5Q2/simulation.py --selftest
-run "blinded example selftest"  examples/S5-Qregister/simulation.py --selftest
-run "checker mutation"          tools/checker-mutation.py
-run "defect closure"            tools/defect-closure.py
-run "defect closure selftest"   tools/defect-closure.py --selftest
-run "implementation mutation"   tools/impl-mutation.py
-run "line endings"              tools/check-line-endings.py
-run "gate parity selftest"      tools/check-gate-parity.py --selftest
-run "gate parity hook-vs-ci"    tools/check-gate-parity.py
+run "gate-lint selftest"          "" tools/gate-lint.py     --selftest
+run "catalog selftest"            "" tools/check-catalog.py --selftest
+run "catalog consistency"         "indexes, the six targets, link discipline" tools/check-catalog.py
+run "de-identification scan"      "" tools/check-catalog.py --scan-leaks
+run "content manifest"            "" tools/make-manifest.py --check
+
+# The hook stays offline by design; CI resolves the canonical tag through the API,
+# which needs --repo <owner/repo> and GH_TOKEN. This is the one gate the two sides
+# run differently, and the difference is declared on the gate rather than in a
+# table inside the checker.
+# ci-only: tools/verify_release_consistency.py --repo-path . --repo "${{ github.repository }}"
+run "release consistency"         "canonical anchor resolves · manifest matches" tools/verify_release_consistency.py --repo-path . --no-remote
+
+run "examples selftest"           "T08-S5Q2 cases + mutation suite" examples/T08-S5Q2/simulation.py --selftest
+run "blinded example selftest"    "S5-Qregister blinded run + mutation suite" examples/S5-Qregister/simulation.py --selftest
+run "checker mutation"            "the checks themselves must be able to fail" tools/checker-mutation.py
+run "defect closure"              "every recorded correction is closed with evidence" tools/defect-closure.py
+run "defect closure selftest"     "that gate must be able to fail too" tools/defect-closure.py --selftest
+run "implementation mutation"     "source-level watch on the artifact under test" tools/impl-mutation.py
+run "line endings"                "the index carries no CRLF" tools/check-line-endings.py
+run "gate parity selftest"        "that gate must be able to fail too" tools/check-gate-parity.py --selftest
+run "gate parity hook-vs-ci"      "the hook and this file run the same gates" tools/check-gate-parity.py
 
 if [ "$fail" -ne 0 ]; then
     echo "" >&2
@@ -124,4 +154,3 @@ if [ "$fail" -ne 0 ]; then
 fi
 
 echo "pre-commit: all gates passed."
-exit 0

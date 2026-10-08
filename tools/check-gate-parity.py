@@ -2,13 +2,13 @@
 """gate-parity -- the hook and CI must run the same gates, in the same order.
 
 `.githooks/pre-commit` is the specification; `.github/workflows/gates.yml` says
-so in its own header ("this file is its echo"). Two hand-written lists drift,
-and this repository has already been bitten: on 2026-09-30 the hook ran five
-gates while CI ran six, and nothing noticed until a human counted. The `N/M`
-step labels exist for exactly that reason -- and a label is still only a label
-until something reads it.
+so in its own header ("this file is its echo"). Those two used to be two
+hand-written lists, and they drifted: on 2026-09-30 the hook ran five gates
+while CI ran six, and nothing noticed until a human counted. The `N/M` step
+labels exist for exactly that reason -- and a label is still only a label until
+something reads it.
 
-This gate reads them.
+This gate reads them. As of 2026-10-08 it also *writes* one of them.
 
 What it checks
   1. The hook's `run` list and the `gates` job's steps are the same ordered
@@ -16,15 +16,17 @@ What it checks
   2. Every step that runs a gate carries an `N/M` label, the labels are 1..M in
      order, and M equals the number of gate steps. A stale `/13` after a
      fourteenth gate is the same drift, one commit later.
-  3. Declared exceptions are exact and still true. An exception is a triple
-     (script, hook args, CI args). Edit either side and the triple stops
-     matching, so the divergence cannot silently widen; and an exception that
-     no longer describes a real difference is reported as stale, so the list
-     cannot accumulate lies.
+  3. Every `# ci-only:` override in the hook names a gate that exists and really
+     changes that gate's arguments. An override that no longer describes a real
+     difference is reported as stale, so the list cannot accumulate lies. There
+     is no separate exception table any more: the one declared difference lives
+     on gate 6's own line in the hook.
   4. Neither list runs the same (script, arguments) pair twice. The same script
      with different arguments is fine -- `check-catalog.py` runs twice on
      purpose; the same pair twice is a duplicate, and a duplicate added to both
      lists is the one symmetric edit a local invariant can still see.
+  5. The CI step block between the two `GENERATED GATE STEPS` markers equals
+     what `--emit-ci` produces from the hook, byte for byte.
 
 What it does not check
   * The `negative-control` job. It is a separate job with deliberately
@@ -32,42 +34,43 @@ What it does not check
   * Whether a gate can fail. That is each gate's own `--selftest`, and
     `gate-lint.py` for the ones that do not carry one.
 
-Known limit
-  An edit applied to *both* lists at once cannot be caught by check 1, because
-  both sides still agree. Three shapes were measured on 2026-10-08 (independent
-  review, 14 mutated copies); all three came back green:
+Which drift shapes this closes, and which one it cannot
+  Check 1 alone could never catch an edit applied to *both* lists at once,
+  because both sides still agreed. Three shapes were measured on 2026-10-08
+  (independent review, 14 mutated copies); all three came back green:
 
-    * the same gate dropped from both lists, labels renumbered;
-    * the same gate added to both lists (copy-paste);
-    * the same gate's arguments changed on both sides.
+    H1  the same gate added to both lists (copy-paste);
+    H3  the same gate's arguments changed on both sides;
+    --  the same gate dropped from both lists, labels renumbered.
 
-  The second is now caught by check 4, which needs no second registry: running
-  a gate twice is a local contradiction. The first and third are not closable
-  that way -- the `N/M` labels live *inside* one of the two lists, so they move
-  with it. Measured, and this is the part that matters: dropping a gate from
-  both lists and renumbering stays green, while dropping it and *forgetting* to
-  renumber is caught. The label discipline therefore defends against the
-  careless edit, not against the careful one -- and the careful edit is what
-  the labels exist to encourage. Counting on it would be counting on the editor
-  to slip.
+  Generating the CI side closes H1 and H3 structurally, not by detection:
+  there is no longer a place to add a gate that the hook does not have, and no
+  place to write different arguments. Checks 4 and 5 are the backstops if
+  someone edits the generated block by hand anyway.
 
-  Closing the first and third shapes properly needs a single source of gates
-  with both lists generated from it, so that "the two sides agree" stops being
-  evidence of anything. That is a larger change and lives outside this file
-  (P2 in the workspace diagnosis). Until then, two things are sometimes offered
-  as cover over those holes -- the reviewer, and branch protection on the CI
-  job -- and neither one is a gate. The reviewer is a process. Branch protection
-  was measured on 2026-10-08 and does not hold either: the rule does require
-  three status checks, but `enforce_admins` is off and the account that pushes
-  here is the admin, so a direct push lands with "Bypassed rule violations"
-  while those checks are still running. Stated here rather than implied.
+  The third shape -- H2, a gate deleted from the hook and the block regenerated
+  -- REMAINS OPEN, and it is not closable here. Both sides derive from one
+  source, so the comparison re-establishes agreement the moment the source
+  loses a line; a single source cannot witness its own omission. Closing H2
+  needs a second registry of expected gates, which is the second source of
+  truth this repository forbids. This is measured, not asserted: control N7 in
+  `--selftest` deletes a gate from the hook fixture, regenerates the block, and
+  requires the result to be GREEN. It is expected to stay green. It is recorded
+  so that "the drift is closed" is never claimed for it.
+
+  What H2 costs is bounded though, and the bound is worth stating: deletion now
+  happens in ONE place, on one line of one file, so a diff shows it. It is
+  visible, it is just not checked.
 
 Reading `gates.yml`
   This repository is stdlib-only and Python ships no YAML parser, so the
   workflow is read with a line scanner. It is deliberately narrow: it walks
   only the `gates:` job, and check 2 fails if the highest label disagrees with
   the number of steps found -- so a scan that silently drops a step fails
-  loudly instead of passing quietly.
+  loudly instead of passing quietly. The same reasoning applies to reading the
+  hook: `parse_hook` counts the lines that begin with `run ` and refuses to
+  return a shorter list than it saw, because a regex that quietly stops matching
+  would drop a gate from the specification without saying so.
 
 Exit status: 0 when the two lists agree, 1 otherwise.
 """
@@ -78,25 +81,23 @@ import argparse
 import re
 import shlex
 import sys
+from collections import namedtuple
 from pathlib import Path
 
 HOOK_REL = ".githooks/pre-commit"
 WORKFLOW_REL = ".github/workflows/gates.yml"
 
-# --------------------------------------------------------------------------- #
-# Declared exceptions: real, intentional differences between the two lists.
-# Each entry is (script, hook_args, ci_args, reason) with the argument tuples
-# written out in full. Anything not listed here that differs is a failure.
-# --------------------------------------------------------------------------- #
-EXCEPTIONS: "list[tuple[str, tuple, tuple, str]]" = [
-    (
-        "tools/verify_release_consistency.py",
-        ("--repo-path", ".", "--no-remote"),
-        ("--repo-path", ".", "--repo", "${{ github.repository }}"),
-        "the hook runs offline by design (--no-remote); CI resolves the tag "
-        "through the API, which needs --repo <owner/repo> and GH_TOKEN",
-    ),
-]
+Gate = namedtuple("Gate", "lineno name note script args")
+
+CI_INDENT = "      "
+CI_BEGIN = "      # BEGIN GENERATED GATE STEPS -- edit .githooks/pre-commit, then"
+CI_END = "      # END GENERATED GATE STEPS"
+
+PROLOGUE = (
+    "      # Every gate carries `if: always()` so that a failure in one does not hide\n"
+    "      # the state of the others: the job is red if any gate failed, and the report\n"
+    "      # is the complete list rather than the first casualty.\n"
+)
 
 
 class GateParityError(Exception):
@@ -107,7 +108,9 @@ class GateParityError(Exception):
 # Parsing
 # --------------------------------------------------------------------------- #
 
-HOOK_RUN = re.compile(r'^run\s+"[^"]*"\s+(\S+)(?:\s+(.*?))?\s*$')
+HOOK_RUN = re.compile(r'^run\s+"([^"]*)"\s+"([^"]*)"\s+(\S+)(?:\s+(.*?))?\s*$')
+HOOK_RUN_START = re.compile(r"^\s*run\s+")
+HOOK_CI_ONLY = re.compile(r"^\s*#\s*ci-only:\s+(\S+)\s*(.*?)\s*$")
 JOB_KEY = re.compile(r"^  (\S+):\s*$")
 CI_STEP = re.compile(r"^\s+- name:\s*(.*?)\s*$")
 CI_RUN = re.compile(r"^\s+run:\s*(.*?)\s*$")
@@ -115,19 +118,59 @@ CI_GATE_CMD = re.compile(r"^python\s+((?:tools|examples)/\S+)(?:\s+(.*))?$")
 CI_LABEL = re.compile(r"^(\d+)\s*/\s*(\d+)\b")
 
 
-def parse_hook(text: str) -> "list[tuple[int, str, tuple]]":
-    """Return [(line, script, args)] for every `run "label" <script> <args>`."""
-    found = []
+def _strip_quotes(text: str) -> str:
+    """Unquote a YAML scalar if it is wholly quoted.
+
+    The generator writes step names as `"6/15 release consistency (...)"`, and a
+    scanner that kept the quotes would fail to see the `N/M` label inside one --
+    check 2 would report a missing label on a perfectly labelled step, which is
+    a false alarm in the direction that trains people to ignore alarms.
+    """
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+        return text[1:-1]
+    return text
+
+
+def parse_hook(text: str) -> "list[Gate]":
+    """Return the hook's gates, in order.
+
+    Every line that begins with `run ` must parse. The count is enforced rather
+    than trusted: a regexp that stops matching half way through the list would
+    remove gates from the specification silently, and this gate would then
+    happily report that CI agrees with a truncated list.
+    """
+    gates = []
+    started = 0
     for lineno, line in enumerate(text.splitlines(), 1):
         if line.lstrip().startswith("#"):
             continue
+        if HOOK_RUN_START.match(line):
+            started += 1
         m = HOOK_RUN.match(line)
         if m is None:
             continue
-        script = m.group(1)
-        args = tuple(shlex.split(m.group(2) or ""))
-        found.append((lineno, script, args))
-    return found
+        gates.append(
+            Gate(lineno, m.group(1), m.group(2), m.group(3),
+                 tuple(shlex.split(m.group(4) or "")))
+        )
+    if started != len(gates):
+        raise GateParityError(
+            "%d line(s) in %s begin with `run ` but only %d parsed as a gate; "
+            "the unparsed ones are being dropped from the specification"
+            % (started, HOOK_REL, len(gates))
+        )
+    return gates
+
+
+def parse_ci_only(text: str) -> "dict[str, tuple]":
+    """Return {script: ci_args} for every `# ci-only:` line in the hook."""
+    overrides = {}
+    for line in text.splitlines():
+        m = HOOK_CI_ONLY.match(line)
+        if m is None:
+            continue
+        overrides[m.group(1)] = tuple(shlex.split(m.group(2) or ""))
+    return overrides
 
 
 def _gates_job_span(lines: "list[str]") -> "tuple[int, int]":
@@ -156,7 +199,7 @@ def parse_ci(text: str) -> "list[tuple[int, str, str, tuple]]":
         line = lines[k]
         m = CI_STEP.match(line)
         if m is not None:
-            last_name = m.group(1)
+            last_name = _strip_quotes(m.group(1))
             last_name_line = k + 1
             continue
         r = CI_RUN.match(line)
@@ -177,6 +220,51 @@ def parse_ci(text: str) -> "list[tuple[int, str, str, tuple]]":
         last_name = None
         last_name_line = None
     return steps
+
+
+# --------------------------------------------------------------------------- #
+# The generator
+# --------------------------------------------------------------------------- #
+
+def ci_args_for(gate: Gate, overrides: "dict[str, tuple]") -> tuple:
+    """The arguments CI should use for this gate."""
+    return overrides.get(gate.script, gate.args)
+
+
+def emit_ci(
+    hook: "list[Gate]",
+    overrides: "dict[str, tuple]",
+    indent: str = CI_INDENT,
+) -> str:
+    """Render the CI step block for the `gates:` job from the hook.
+
+    The hook is the specification; this is the echo, written by a program
+    instead of by hand. The returned text is exactly what must appear between
+    the two markers in `gates.yml`.
+
+    This is the whole point of the change: a gate that exists only in CI is not
+    detected here, it is *impossible* here -- the block is overwritten from the
+    hook every time, and check 5 fails if anyone writes to it by hand.
+    """
+    total = len(hook)
+    lines = [PROLOGUE.rstrip("\n")]
+    for i, gate in enumerate(hook, 1):
+        name = "%d/%d %s" % (i, total, gate.name)
+        if gate.note:
+            name += " (%s)" % gate.note
+        args = ci_args_for(gate, overrides)
+        command = "python %s%s" % (
+            gate.script, (" " + _quote_args(args)) if args else ""
+        )
+        lines.append('%s- name: "%s"' % (indent, name))
+        lines.append("%s  if: always()" % indent)
+        lines.append("%s  run: %s" % (indent, command))
+    return "\n".join(lines) + "\n"
+
+
+def emit_region(hook: "list[Gate]", overrides: "dict[str, tuple]") -> str:
+    """The whole replaceable region, markers included."""
+    return CI_BEGIN + "\n" + emit_ci(hook, overrides) + "\n" + CI_END + "\n"
 
 
 # --------------------------------------------------------------------------- #
@@ -219,13 +307,13 @@ def check_labels(ci: "list[tuple[int, str, str, tuple]]") -> "list[str]":
 
 
 def check_parity(
-    hook: "list[tuple[int, str, tuple]]",
+    hook: "list[Gate]",
     ci: "list[tuple[int, str, str, tuple]]",
-    exceptions: "list[tuple[str, tuple, tuple, str]]" = None,
+    overrides: "dict[str, tuple] | None" = None,
 ) -> "list[str]":
-    """The two gate lists must be equal, up to the declared exceptions."""
-    if exceptions is None:
-        exceptions = list(EXCEPTIONS)
+    """The two gate lists must be equal, up to the `# ci-only:` overrides."""
+    if overrides is None:
+        overrides = {}
     problems = []
 
     if len(hook) != len(ci):
@@ -233,56 +321,51 @@ def check_parity(
             "the hook runs %d gate(s) but the `gates:` job runs %d" % (len(hook), len(ci))
         )
 
-    hook_only = [script for _, script, _ in hook]
-    ci_only = [script for _, _, script, _ in ci]
-
     for position, (h, c) in enumerate(zip(hook, ci), 1):
-        h_line, h_script, h_args = h
         c_line, _c_label, c_script, c_args = c
-        if h_script != c_script:
+        if h.script != c_script:
             problems.append(
                 "step %d: the hook runs %s (line %d) but CI runs %s (line %d)"
-                % (position, h_script, h_line, c_script, c_line)
+                % (position, h.script, h.lineno, c_script, c_line)
             )
             continue
-        if h_args == c_args:
-            continue
-        if any(
-            e[0] == h_script and e[1] == h_args and e[2] == c_args for e in exceptions
-        ):
+        expected = ci_args_for(h, overrides)
+        if expected == c_args:
             continue
         problems.append(
-            "step %d: %s takes different arguments -- hook %s (line %d) vs CI %s "
-            "(line %d)" % (position, h_script, list(h_args), h_line, list(c_args), c_line)
+            "step %d: %s should run with %s in CI (hook line %d) but CI has %s "
+            "(line %d)" % (position, h.script, list(expected), h.lineno,
+                           list(c_args), c_line)
         )
 
     if len(hook) != len(ci):
-        extra_h = hook_only[len(ci):] if len(hook) > len(ci) else []
-        extra_c = ci_only[len(hook):] if len(ci) > len(hook) else []
-        for script in extra_h:
-            problems.append("only in the hook: %s" % script)
-        for script in extra_c:
-            problems.append("only in CI: %s" % script)
+        if len(hook) > len(ci):
+            for gate in hook[len(ci):]:
+                problems.append("only in the hook: %s" % gate.script)
+        else:
+            for step in ci[len(hook):]:
+                problems.append("only in CI: %s" % step[2])
 
-    # An exception that is no longer a real difference is a stale claim.
-    for script, h_args, c_args, reason in exceptions:
-        matched = False
-        for h, c in zip(hook, ci):
-            if h[1] == script and c[2] == script and h[2] == h_args and c[3] == c_args:
-                matched = True
-                break
-        if not matched:
+    # An override that is no longer a real difference is a stale claim.
+    for script, args in overrides.items():
+        matching = [g for g in hook if g.script == script]
+        if not matching:
             problems.append(
-                "declared exception for %s no longer describes a real difference "
-                "-- hook %s vs CI %s; remove it or update it (reason on file: %s)"
-                % (script, list(h_args), list(c_args), reason)
+                "the `# ci-only:` override for %s names no gate in the hook; it "
+                "is describing something that is not there" % script
+            )
+        elif not any(ci_args_for(g, overrides) != g.args for g in matching):
+            problems.append(
+                "the `# ci-only:` override for %s is stale -- it gives CI exactly "
+                "the arguments the hook already uses, so it describes no difference"
+                % script
             )
 
     return problems
 
 
 def check_unique(
-    hook: "list[tuple[int, str, tuple]]",
+    hook: "list[Gate]",
     ci: "list[tuple[int, str, str, tuple]]",
 ) -> "list[str]":
     """Neither list may run the same (script, arguments) pair more than once.
@@ -290,16 +373,15 @@ def check_unique(
     A gate duplicated in one list and then in the other leaves the two lists in
     perfect agreement, so check 1 cannot see it. This one can, and it needs no
     second registry of expected gates: running a gate twice is a contradiction
-    inside the list itself. It is the only shape of a symmetric edit that is
-    locally decidable, which is exactly why it is worth a check.
+    inside the list itself.
 
     The same *script* with different arguments stays legal and expected --
     `check-catalog.py` runs twice, once for the catalog and once for leaks.
     """
     problems = []
     sides = (
-        ("the hook", [(script, args) for _, script, args in hook]),
-        ("CI", [(script, args) for _, _, script, args in ci]),
+        ("the hook", [(g.script, g.args) for g in hook]),
+        ("CI", [(step[2], step[3]) for step in ci]),
     )
     for side, pairs in sides:
         first_seen = {}
@@ -313,6 +395,37 @@ def check_unique(
             else:
                 first_seen[key] = position
     return problems
+
+
+def check_emit(
+    workflow_text: str,
+    hook: "list[Gate]",
+    overrides: "dict[str, tuple]",
+) -> "list[str]":
+    """The CI step block must equal what `emit_ci()` would produce.
+
+    This is what makes "a gate added to CI but not to the hook" impossible
+    rather than merely detectable: there is no longer a place to add one.
+    """
+    n_begin = workflow_text.count(CI_BEGIN)
+    n_end = workflow_text.count(CI_END)
+    if n_begin != 1 or n_end != 1:
+        return [
+            "expected exactly one generated block in %s; found %d BEGIN and %d "
+            "END marker(s). A second block would be a gate list nothing "
+            "generates." % (WORKFLOW_REL, n_begin, n_end)
+        ]
+    start = workflow_text.index(CI_BEGIN) + len(CI_BEGIN)
+    end = workflow_text.index(CI_END)
+    actual = workflow_text[start:end]
+    expected = "\n" + emit_ci(hook, overrides) + "\n"
+    if actual != expected:
+        return [
+            "the CI step block does not match `--emit-ci` output; re-run "
+            "`python tools/check-gate-parity.py --emit-ci` and replace the "
+            "region between the markers"
+        ]
+    return []
 
 
 # --------------------------------------------------------------------------- #
@@ -335,10 +448,13 @@ def _quote_args(args: "tuple") -> str:
     return " ".join(out)
 
 
-def _hook_text(pairs: "list[tuple[str, tuple]]") -> str:
+def _hook_text(pairs: "list[tuple[str, tuple]]", notes=None) -> str:
+    """A hook fixture in the real format: run "<name>" "<note>" <script> <args>."""
     out = ["#!/bin/sh", "set -u", ""]
     for i, (script, args) in enumerate(pairs, 1):
-        out.append('run "gate %d" %s %s' % (i, script, _quote_args(args)))
+        note = "" if notes is None else notes.get(script, "")
+        name = "%s gate %d" % (Path(script).stem.replace("_", " "), i)
+        out.append('run "%s" "%s" %s %s' % (name, note, script, _quote_args(args)))
     return "\n".join(out) + "\n"
 
 
@@ -374,6 +490,20 @@ def _ci_text(
     return "\n".join(out) + "\n"
 
 
+def _wf_with_block(hook: "list[Gate]", overrides: "dict[str, tuple]", block=None) -> str:
+    """A workflow fixture carrying a generated block.
+
+    `block` defaults to what the generator produces, so the green control is
+    "the generator's own output is accepted" -- which is the property check 5
+    has to have before it can be trusted to reject anything.
+    """
+    if block is None:
+        block = emit_ci(hook, overrides)
+    head = "name: gates\njobs:\n  gates:\n    runs-on: ubuntu-latest\n    steps:\n"
+    tail = "  negative-control:\n    runs-on: ubuntu-latest\n"
+    return head + CI_BEGIN + "\n" + block + "\n" + CI_END + "\n" + tail
+
+
 BASE = [
     ("tools/gate-lint.py", ("--selftest",)),
     ("tools/check-catalog.py", ()),
@@ -381,12 +511,28 @@ BASE = [
     ("tools/check-line-endings.py", ()),
 ]
 
+RELEASE = "tools/verify_release_consistency.py"
+HOOK_ARGS = ("--repo-path", ".", "--no-remote")
+CI_ARGS = ("--repo-path", ".", "--repo", "${{ github.repository }}")
 
-def _run_case(name, hook_pairs, ci_pairs, expect_problems, exceptions=None, **ci_kw):
+
+def _run_case(name, hook_pairs, ci_pairs, expect_problems, overrides=None, **ci_kw):
     hook = parse_hook(_hook_text(hook_pairs))
     ci = parse_ci(_ci_text(ci_pairs, **ci_kw))
-    exc = list(EXCEPTIONS) if exceptions is None else exceptions
-    problems = check_parity(hook, ci, exceptions=exc) + check_labels(ci) + check_unique(hook, ci)
+    ov = {} if overrides is None else overrides
+    problems = check_parity(hook, ci, ov) + check_labels(ci) + check_unique(hook, ci)
+    got = len(problems) > 0
+    ok = got == expect_problems
+    return ok, name, expect_problems, problems
+
+
+def _emit_case(name, hook_pairs, expect_problems, mutate=None, notes=None, overrides=None):
+    """A control over check 5: build a block, optionally damage it, compare."""
+    hook = parse_hook(_hook_text(hook_pairs, notes=notes))
+    ov = {} if overrides is None else overrides
+    block = mutate(emit_ci(hook, ov)) if mutate else None
+    wf = _wf_with_block(hook, ov, block=block)
+    problems = check_emit(wf, hook, ov)
     got = len(problems) > 0
     ok = got == expect_problems
     return ok, name, expect_problems, problems
@@ -402,26 +548,20 @@ def selftest() -> int:
     cases = []
 
     # --- green controls: these must stay silent ---
-    # BASE contains no excepted script, so the exception list is empty here: an
-    # exception that names a script the fixture does not contain is stale by
-    # definition, and the stale-exception check below relies on that.
-    cases.append(_run_case("identical lists pass", BASE, BASE, False, exceptions=[]))
+    cases.append(_run_case("identical lists pass", BASE, BASE, False, overrides={}))
     cases.append(
         _run_case(
-            "declared exception is honoured",
-            [(EXCEPTIONS[0][0], EXCEPTIONS[0][1])],
-            [(EXCEPTIONS[0][0], EXCEPTIONS[0][2])],
+            "a ci-only override is honoured",
+            [(RELEASE, HOOK_ARGS)],
+            [(RELEASE, CI_ARGS)],
             False,
+            overrides={RELEASE: CI_ARGS},
         )
     )
 
     # --- red controls: each must be caught ---
-    cases.append(
-        _run_case("CI is missing a gate", BASE, BASE[:-1], True)
-    )
-    cases.append(
-        _run_case("the hook is missing a gate", BASE[:-1], BASE, True)
-    )
+    cases.append(_run_case("CI is missing a gate", BASE, BASE[:-1], True))
+    cases.append(_run_case("the hook is missing a gate", BASE[:-1], BASE, True))
     cases.append(
         _run_case(
             "an argument differs",
@@ -430,60 +570,158 @@ def selftest() -> int:
             True,
         )
     )
+    cases.append(_run_case("a label is missing", BASE, BASE, True, hide_label_at=2))
     cases.append(
-        _run_case("a label is missing", BASE, BASE, True, hide_label_at=2)
+        _run_case("the label total is stale", BASE, BASE, True, label_total=len(BASE) - 1)
     )
+    # Dead control for the override machinery: nudge one character of the
+    # overridden pair and the override must stop matching.
     cases.append(
         _run_case(
-            "the label total is stale", BASE, BASE, True, label_total=len(BASE) - 1
-        )
-    )
-    # Dead control for the exception machinery itself: nudge one character of an
-    # excepted pair and the exception must stop matching.
-    cases.append(
-        _run_case(
-            "an edited exception stops matching",
-            [("tools/verify_release_consistency.py", ("--repo-path", ".", "--no-remote"))],
-            [("tools/verify_release_consistency.py", ("--repo-path", ".", "--repo"))],
+            "an edited override stops matching",
+            [(RELEASE, HOOK_ARGS)],
+            [(RELEASE, ("--repo-path", ".", "--repo"))],
             True,
+            overrides={RELEASE: CI_ARGS},
         )
     )
-    # An exception that no longer describes a difference is a stale claim.
-    hook = parse_hook(_hook_text([("tools/verify_release_consistency.py", ("--repo-path", ".", "--no-remote"))]))
-    ci = parse_ci(_ci_text([("tools/verify_release_consistency.py", ("--repo-path", ".", "--no-remote"))]))
-    stale = check_parity(hook, ci, exceptions=list(EXCEPTIONS)) + check_labels(ci) + check_unique(hook, ci)
-    cases.append((len(stale) > 0, "a stale exception is reported", True, stale))
-
-    # A step with no label at all in an otherwise well-formed file.
+    # An override that no longer describes a difference is a stale claim.
     cases.append(
         _run_case(
-            "a step running a gate with no label is caught",
+            "a stale override is reported",
+            [(RELEASE, HOOK_ARGS)],
+            [(RELEASE, HOOK_ARGS)],
+            True,
+            overrides={RELEASE: HOOK_ARGS},
+        )
+    )
+    # ...and one that names a gate that does not exist.
+    cases.append(
+        _run_case(
+            "an override naming no gate is reported",
             BASE,
             BASE,
             True,
-            hide_label_at=1,
+            overrides={"tools/nowhere.py": ("--x",)},
         )
+    )
+    cases.append(
+        _run_case("a step running a gate with no label is caught", BASE, BASE, True,
+                  hide_label_at=1)
     )
 
     # Dead control for check 4. The same gate is appended to *both* lists, which
     # is precisely the symmetric edit check 1 is blind to; check 4 must see it.
     # If this control ever passes green, check 4 is decoration.
     dup = list(BASE) + [BASE[0]]
-    cases.append(
-        _run_case("the same gate twice in both lists", dup, dup, True)
-    )
+    cases.append(_run_case("the same gate twice in both lists", dup, dup, True))
     # ...and the guard against over-tightening it: BASE already runs
     # check-catalog.py twice with different arguments, and the green control
     # above covers it. A check that flagged that would be the wrong check.
+
+    # --- check 5, N1..N7: the generated block ---
+    # N1  positive control: the generator's own output is accepted.
+    cases.append(_emit_case("N1 the generator's output is accepted", BASE, False))
+    # N2  2026-09-30's shape: a gate added to CI and not to the hook.
+    cases.append(
+        _emit_case(
+            "N2 a gate hand-added to the block is caught",
+            BASE,
+            True,
+            mutate=lambda b: b + '      - name: "5/4 smuggled"\n'
+                                 "        if: always()\n"
+                                 "        run: python tools/make-manifest.py --check\n",
+        )
+    )
+    # N3  H3's shape: an argument changed inside the block.
+    cases.append(
+        _emit_case(
+            "N3 an argument changed inside the block is caught",
+            BASE,
+            True,
+            mutate=lambda b: b.replace(
+                "python tools/check-catalog.py --scan-leaks",
+                "python tools/check-catalog.py --scan-leaks --quiet",
+            ),
+        )
+    )
+    # N4  a gate deleted from the block. The deleted text is taken from the
+    # generator's own output rather than typed out, so the control cannot pass
+    # by failing to match anything -- a mutation that does not mutate is a
+    # control that tests nothing.
+    _one_step = (
+        '      - name: "3/4 check-catalog gate 3"\n'
+        "        if: always()\n"
+        "        run: python tools/check-catalog.py --scan-leaks\n"
+    )
+    cases.append(
+        _emit_case(
+            "N4 a gate deleted from the block is caught",
+            BASE,
+            True,
+            mutate=lambda b, _s=_one_step: b.replace(_s, "") if _s in b else b,
+        )
+    )
+    # N5  the hook moved on and the block was not regenerated: a gate is added
+    # to the hook, the workflow still shows the old block.
+    hook_full = parse_hook(_hook_text(BASE))
+    hook_more = parse_hook(_hook_text(BASE + [("tools/make-manifest.py", ("--check",))]))
+    cases.append(
+        (
+            len(check_emit(_wf_with_block(hook_full, {}), hook_more, {})) > 0,
+            "N5 a block not regenerated after the hook grew is caught",
+            True,
+            check_emit(_wf_with_block(hook_full, {}), hook_more, {}),
+        )
+    )
+    # N5b  ...and after the hook shrank. This is the mirror of N7 and the reason
+    # N7's green verdict is about one direction only.
+    cases.append(
+        (
+            len(check_emit(_wf_with_block(hook_more, {}), hook_full, {})) > 0,
+            "N5b a block not regenerated after the hook shrank is caught",
+            True,
+            check_emit(_wf_with_block(hook_more, {}), hook_full, {}),
+        )
+    )
+    # N6  the round trip that actually carries punctuation: the emitted run line
+    # contains `"${{ github.repository }}"`, which is where quoting breaks if it
+    # is going to.
+    cases.append(
+        _emit_case(
+            "N6 a block containing shell-quoted arguments round-trips",
+            [(RELEASE, HOOK_ARGS)],
+            False,
+            overrides={RELEASE: CI_ARGS},
+        )
+    )
+    # N7  THE HONESTY CONTROL. A gate is deleted from the hook and the block is
+    # regenerated from it: both sides agree, so this is GREEN. It must stay
+    # green. It is here so that "the drift is closed" is never claimed for this
+    # shape -- H2 is open, and this control is the evidence.
+    hook_minus = parse_hook(_hook_text(BASE[:-1]))
+    wf_minus = _wf_with_block(hook_minus, {})
+    h2 = check_emit(wf_minus, hook_minus, {}) + check_parity(
+        hook_minus, parse_ci(wf_minus), {}
+    )
+    cases.append((len(h2) == 0,
+                  "N7 a gate lost by the hook is NOT caught (H2 stays open)",
+                  False, h2))
+    # ...and the matching red control, so N7 cannot be satisfied by check 5
+    # being broken into always-green: the *same* generator, asked about the
+    # larger hook, must reject that block.
+    cases.append((len(check_emit(wf_minus, parse_hook(_hook_text(BASE)), {})) > 0,
+                  "N7b the same block against the fuller hook is caught",
+                  True, check_emit(wf_minus, parse_hook(_hook_text(BASE)), {})))
 
     failures = 0
     for ok, name, expected_red, problems in cases:
         want = "red" if expected_red else "green"
         if ok:
-            print("  ok    %-46s (wanted %s)" % (name, want))
+            print("  ok    %-56s (wanted %s)" % (name, want))
         else:
             failures += 1
-            print("  FAIL  %-46s (wanted %s, got %d problem(s))" % (name, want, len(problems)))
+            print("  FAIL  %-56s (wanted %s, got %d problem(s))" % (name, want, len(problems)))
             for p in problems:
                 print("          - %s" % p)
 
@@ -499,6 +737,24 @@ def selftest() -> int:
 # Entry point
 # --------------------------------------------------------------------------- #
 
+def _load(root: Path) -> "tuple[list[Gate], dict[str, tuple], str]":
+    hook_path = root / HOOK_REL
+    wf_path = root / WORKFLOW_REL
+    for p in (hook_path, wf_path):
+        if not p.is_file():
+            raise GateParityError(
+                "%s is missing. A file that is not there cannot be compared." % p
+            )
+    hook_text = hook_path.read_text(encoding="utf-8")
+    hook = parse_hook(hook_text)
+    if not hook:
+        raise GateParityError(
+            "no `run` lines found in %s. An empty list is not an agreeing list."
+            % HOOK_REL
+        )
+    return hook, parse_ci_only(hook_text), wf_path.read_text(encoding="utf-8")
+
+
 def main(argv: "list[str] | None" = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -507,36 +763,42 @@ def main(argv: "list[str] | None" = None) -> int:
         help="repository root (default: the parent of this script's directory)",
     )
     parser.add_argument("--selftest", action="store_true", help="prove this gate can fail")
+    parser.add_argument(
+        "--emit-ci",
+        action="store_true",
+        help="print the generated region of %s on stdout and exit" % WORKFLOW_REL,
+    )
+    parser.add_argument(
+        "--check-emit",
+        action="store_true",
+        help="only run check 5 (the CI block equals the generator's output)",
+    )
     args = parser.parse_args(argv)
 
     if args.selftest:
         return selftest()
 
     root = Path(args.repo_path)
-    hook_path = root / HOOK_REL
-    wf_path = root / WORKFLOW_REL
-    for p in (hook_path, wf_path):
-        if not p.is_file():
-            print("gate-parity: FAILED -- %s is missing." % p, file=sys.stderr)
-            print("gate-parity: a file that is not there cannot be compared.", file=sys.stderr)
-            return 1
-
     try:
-        hook = parse_hook(hook_path.read_text(encoding="utf-8"))
-        ci = parse_ci(wf_path.read_text(encoding="utf-8"))
+        hook, overrides, workflow_text = _load(root)
     except GateParityError as exc:
         print("gate-parity: FAILED -- %s" % exc, file=sys.stderr)
         return 1
 
-    if not hook:
-        print(
-            "gate-parity: FAILED -- no `run` lines found in %s. An empty list is "
-            "not an agreeing list." % HOOK_REL,
-            file=sys.stderr,
-        )
-        return 1
+    if args.emit_ci:
+        sys.stdout.write(emit_region(hook, overrides))
+        return 0
 
-    problems = check_parity(hook, ci) + check_labels(ci) + check_unique(hook, ci)
+    problems = []
+    if args.check_emit:
+        problems += check_emit(workflow_text, hook, overrides)
+    else:
+        ci = parse_ci(workflow_text)
+        problems += check_parity(hook, ci, overrides)
+        problems += check_labels(ci)
+        problems += check_unique(hook, ci)
+        problems += check_emit(workflow_text, hook, overrides)
+
     if problems:
         print("gate-parity: the hook and CI have drifted.", file=sys.stderr)
         for p in problems:
@@ -545,9 +807,15 @@ def main(argv: "list[str] | None" = None) -> int:
         print("gate 14 FAILED: %s" % WORKFLOW_REL, file=sys.stderr)
         return 1
 
+    if args.check_emit:
+        print("OK: the generated CI step block matches the hook.")
+        return 0
+
+    ci = parse_ci(workflow_text)
     print(
-        "OK: hook and CI agree on %d gate(s), labels 1/%d..%d/%d, %d declared "
-        "exception(s)." % (len(hook), len(ci), len(ci), len(ci), len(EXCEPTIONS))
+        "OK: hook and CI agree on %d gate(s), labels 1/%d..%d/%d, %d ci-only "
+        "override(s), generated block matches."
+        % (len(hook), len(ci), len(ci), len(ci), len(overrides))
     )
     return 0
 
