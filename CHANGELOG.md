@@ -11,6 +11,23 @@ Gates 9 and 10, three new hard rules, and the closure of an external review roun
 
 ### Added
 
+- **`tools/impl-mutation.py` (gate 12)** — systematically mutates `implementation.py` itself
+  (five first-order operator classes over the token stream: comparison flip, boolean
+  negation, boolean-operator swap, numeral edit, literal flip) and requires every
+  non-equivalent mutant to be killed by the S5 selftest, reporting a mutation score against
+  a break threshold and classifying 10x-baseline timeouts as killed. Grounded by
+  `SENTINEL-noop` / `SENTINEL-fatal` (grounding sentinels are reported but excluded from
+  the mutant count and the score). An initial run left several real mutants alive; the
+  survivors drove four new decision-point negative controls (exit-code contract, per-key
+  missing-timestamp refusal, freeze-window boundary equality, per-profile
+  source-unavailable traces); the suite now kills 11 of the 12 real mutants, with the
+  one survivor disclosed as equivalent under the current observation contract
+  (`EXIT_FAIL` numeral, no numeric contract in the fixture).
+- **Metamorphic relations MR-1/2/3** in the S5 harness — oracle-independent invariance
+  checks across every (profile, branch) pair: unrelated-key invariance, uniform time-shift
+  invariance, older-prefix lineage monotonicity; the relation checker carries a negative
+  control (a magnitude-leaking stub must be flagged). Narrows the shared-provenance oracle
+  gap (Barr et al. 2015 pseudoracle class) without claiming to close it.
 - **`tools/checker-mutation.py`** — mutates this repository's own checks and requires each
   mutation to break a selftest, so "our checks can fail" is a checked property. Its first run
   found that 7 of the S5 selftest's 12 decision points had never been shown capable of failing.

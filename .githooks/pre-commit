@@ -91,9 +91,9 @@ run "release consistency"       tools/verify_release_consistency.py --repo-path 
 run "examples selftest"         examples/T08-S5Q2/simulation.py --selftest
 run "blinded example selftest"  examples/S5-Qregister/simulation.py --selftest
 run "checker mutation"          tools/checker-mutation.py
-run "implementation mutation"   tools/impl-mutation.py
 run "defect closure"            tools/defect-closure.py
 run "defect closure selftest"   tools/defect-closure.py --selftest
+run "implementation mutation"   tools/impl-mutation.py
 
 if [ "$fail" -ne 0 ]; then
     echo "" >&2

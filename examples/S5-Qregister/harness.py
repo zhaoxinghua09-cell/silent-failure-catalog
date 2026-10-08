@@ -1020,6 +1020,101 @@ def _row4_negative_control():
     return problems
 
 
+# --------------------------------------------------------------------------- #
+# Metamorphic relations: oracle-independent invariance checks.
+#
+# The fixture reference set and the implementation share an authoring team --
+# a *pseudoracle* in Barr et al. 2015's taxonomy (IEEE TSE 42(1)), the weakest
+# independence class. Metamorphic testing (Chen et al.) attacks exactly that:
+# a relation is a property of the *domain*, not of any fixture, so checking it
+# needs no second opinion about what "correct" is. Each relation below is run
+# across every (profile, branch) pair, and each carries its own negative
+# control -- a deliberately violating stub the checker must reject, so the
+# relations cannot rot into decoration either.
+# --------------------------------------------------------------------------- #
+_MR_TIMESHIFT_S = 5000.0          # any constant; topology must not care
+_MR_PREFIX = ("patch-a@gen1-archived",)   # an *older* superseding generation
+
+def _clone_obs(o, **overrides):
+    """A fresh Observation with field-level overrides (no aliasing)."""
+    fields = dict(current_generation=o.current_generation,
+                  source_version=o.source_version,
+                  source_available=o.source_available,
+                  freeze_state=o.freeze_state,
+                  supersession_lineage=o.supersession_lineage,
+                  timestamps=o.timestamps,
+                  authority_state=o.authority_state,
+                  binding_tokens=o.binding_tokens)
+    fields.update(overrides)
+    return impl.Observation(**fields)
+
+def _mr_violations(model):
+    """Run the three relations against ``model`` (Observation -> semantic key).
+
+    Returns a list of violation labels; empty means every relation held.
+    """
+    mismatches = []
+    all_branches = sorted(BRANCHES)
+    for branch in all_branches:
+        o = observables_for(branch)
+        # MR-1 unrelated-precondition injection invariance: a timestamp key the
+        # model has no semantics for must not move any ruling.
+        poisoned = _clone_obs(o, timestamps=dict(o.timestamps,
+                                                 t_scheduler_noise=1_000_000))
+        if model(o) != model(poisoned):
+            mismatches.append("MR-1 unrelated key moved the ruling (%s)" % branch)
+        # MR-2 time-shift invariance: one constant added to *every* timestamp
+        # preserves the topological conclusion (inside-window is order, not
+        # magnitude; the freeze/binding comparisons are all relative).
+        shifted = _clone_obs(o, timestamps={
+            k: v + _MR_TIMESHIFT_S for k, v in o.timestamps.items()})
+        if model(o) != model(shifted):
+            mismatches.append("MR-2 uniform time shift moved the ruling (%s)"
+                       % branch)
+        # MR-3 well-ordered prefix additivity: prepending an *older* superseding
+        # generation to an EXISTING lineage cannot flip a REASSESS ruling (the
+        # affected-generation detector is set-membership based, monotone under
+        # lineage growth). An empty -> non-empty transition is NOT covered: a
+        # ruling that changes when the first superseding generation appears is
+        # the Q4 detector doing its job, not a relation violation.
+        if o.supersession_lineage:
+            prefixed = _clone_obs(o, supersession_lineage=_MR_PREFIX
+                                  + o.supersession_lineage)
+            if model(o) != model(prefixed):
+                mismatches.append("MR-3 older lineage prefix flipped the ruling (%s)"
+                           % branch)
+    return mismatches
+
+def _mr_semantic_key(obs, profile):
+    """The semantic output the relations constrain: ruling + attempt."""
+    _exit, verdict = impl.run(profile, obs)
+    return (verdict.guard_decision, verdict.attempted_action)
+
+def _metamorphic_controls():
+    """The three relations on the real model, then the checker's own teeth."""
+    problems = []
+    for profile in sorted(impl.PROFILES):
+        key = lambda o, p=profile: _mr_semantic_key(o, p)
+        for label in _mr_violations(key):
+            problems.append("metamorphic control: %s -- profile %s broke an "
+                            "oracle-independent relation" % (label, profile))
+    # Negative control: a model that *does* violate a relation (it reads
+    # absolute clock magnitude) must be flagged. Without this, a refactor that
+    # silently removed the relation checks would still report green.
+    def _magnitude_leak(obs):
+        # A model whose key depends on the *absolute* clock bucket: a uniform
+        # shift moves the bucket, so MR-2 must flag it (the leak differs
+        # between the original and the shifted observation, which is what a
+        # genuine magnitude dependence looks like).
+        base = _mr_semantic_key(obs, "I2-complete")
+        return ("LEAKED", obs.timestamps.get("t_check", 0) // 1000, base[1])
+    if not _mr_violations(_magnitude_leak):
+        problems.append("negative control (metamorphic): a model that reads "
+                        "absolute clock magnitude was waved through -- the MR "
+                        "checker has no teeth")
+    return problems
+
+
 def _survivor_detection_negative_control():
     """A surviving mutant must be reported, not waved through.
 
@@ -1176,6 +1271,7 @@ def selftest():
     problems.extend(_row4_negative_control())
     problems.extend(_survivor_detection_negative_control())
     problems.extend(_decision_point_negative_controls())
+    problems.extend(_metamorphic_controls())
 
     # Blinding: the runner must not be able to see which branch it is on.
     problems.extend(_assert_blind())
@@ -1297,6 +1393,10 @@ def selftest():
           "checked for internal coherence; the README agreement covers every "
           "crosswalk column and is itself shown to fail on a tampered README; "
           "and every mutant of the runner is killed by its crosswalk branches; "
+          "and three oracle-independent metamorphic relations (unrelated-key "
+          "invariance, uniform time-shift invariance, older-prefix lineage "
+          "monotonicity) hold across every profile and branch, so the rulings "
+          "do not lean on the fixture's exact shapes; "
           "and every one of these checks is itself paired with a control that "
           "feeds it a shape it must reject, so none of them is a claim nobody "
           "watched fail.")

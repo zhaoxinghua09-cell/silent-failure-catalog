@@ -128,6 +128,9 @@ The runnable examples (`examples/T08-S5Q2`, `examples/S5-Qregister`) verify an *
 >
 > 中文：*示例全部结论均在一个由实现作者起草的有界 fixture 上得出；oracle 与实现同源；独立性证据仅来自负控、检查器变异、变形关系与外部评审。以上不构成规格完备性证明；S5/T08 走查仍是模型结果而非真实产品执行。*
 
+**Metamorphic relations: partial independence from the fixture's shapes.**
+Because the oracle shares provenance with the implementation, the S5 harness additionally checks three *metamorphic relations* (Chen et al.) across every (profile, branch) pair — relations that are properties of the domain, not of any fixture: **MR-1** an unrelated timestamp key must not move any ruling; **MR-2** a uniform shift of every timestamp preserves the topological conclusion (inside-window is order, not magnitude); **MR-3** prepending an *older* superseding generation to an existing lineage cannot flip a REASSESS ruling. The relation checker carries a negative control (a deliberately magnitude-leaking stub the checker must reject). This narrows, but does not close, the pseudoracle gap: the reference set's completeness remains a stipulated assumption.
+
 **Are the negative controls themselves alive?**
 The checker-mutation gate (`tools/checker-mutation.py`) mutates this repo's own checks and requires each mutation to break a selftest, with two sentinels: `SENTINEL-inert` (a purely textual change that *must survive* — if the tool reports it killed, the tool is lying) and `SENTINEL-fatal` (a change that *must die* — if the tool reports it survived, the tool is blind). What the sentinels cover: the mutation engine's ability to see real failures and to not fabricate them. What they do not cover: an *equivalent* mutation misjudged as a test gap (undecidable in general — see below), or a compromised execution base.
 

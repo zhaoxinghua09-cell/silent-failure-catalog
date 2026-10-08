@@ -111,10 +111,13 @@ def candidate_mutations(source):
         elif ttype == tokenize.NAME and tstr == "not":
             kind, new = "NOT", ""
         elif ttype == tokenize.NUMBER:
-            try:
+            core = tstr[1:] if tstr[:1] in ("+", "-") else tstr
+            if core.isdigit():
                 kind, new = "NUM", str(int(tstr) + 1)
-            except ValueError:
-                continue  # float / complex / suffixed -- out of scope for v1
+            # else: float / complex / underscore-grouped / suffixed numeric
+            # literals are out of scope for v1 -- skipped explicitly here
+            # rather than via an exception handler that would swallow the
+            # distinction between "skipped by design" and "crashed".
         if kind is None or new is None or new == tstr:
             continue
         counters[kind] = counters.get(kind, 0) + 1
@@ -193,6 +196,7 @@ def main():
         mutants = [("SENTINEL-noop", _s, _e, _old, _old)] + mutants
     print("  mutant count                           -> %d (5 operator classes)"
           % len(mutants))
+    print("  (count includes grounding sentinels; see 'real mutants' below)")
     print("  per-mutant timeout                     -> %.0fs (%.0fx baseline)"
           % (timeout, TIMEOUT_FACTOR))
 
@@ -248,20 +252,30 @@ def main():
                 "SENTINEL-fatal: mutation %s survived -- the pipeline cannot "
                 "see a real failure in the ruling path." % mut_id)
 
-    total = len(mutants)
-    exempt_n = sum(1 for m in mutants
-                   if m[0] in EXEMPT_SURVIVAL)
+    # Accounting: grounding sentinels are NOT mutants. SENTINEL-noop (new ==
+    # old) exists to prove the pipeline does not fabricate kills; counting it
+    # in the total would inflate the denominator and misstate the score.
+    noop_count = sum(1 for m in mutants if m[3] == m[4])
+    real_mutants = len(mutants) - noop_count
+    print("  real mutants (sentinels excluded)      -> %d (+%d grounding "
+          "sentinel)" % (real_mutants, noop_count))
     # Score denominator excludes *disclosed-equivalent* survivors (Stryker's
     # "ignored" status): an equivalent mutant cannot be killed by any test,
     # so counting it against the score would measure the fixture, not the
     # suite. Every exclusion is an explicit, inspected EXEMPT_SURVIVAL entry.
-    denom = total - exempt_n
+    exempt_n = sum(1 for m in mutants
+                   if m[0] in EXEMPT_SURVIVAL and m[3] != m[4])
+    denom = real_mutants - exempt_n
     score = (killed + timeout_killed) / denom if denom else 0.0
     print("-" * 70)
-    print("  killed %d (incl. %d timeout) | survived %d | total %d"
-          % (killed, timeout_killed, survived, total))
-    print("  mutation score                         -> %.3f (break >= %.2f)"
+    print("  killed %d (incl. %d timeout) | disclosed-equivalent survivor %d "
+          "| real mutants %d"
+          % (killed, timeout_killed, survived, real_mutants))
+    print("  mutation score (equivalents excluded)  -> %.3f (break >= %.2f)"
           % (score, BREAK_THRESHOLD))
+    raw = (killed + timeout_killed) / real_mutants if real_mutants else 0.0
+    print("  raw kill ratio (all real mutants)      -> %d/%d = %.3f"
+          % (killed + timeout_killed, real_mutants, raw))
     if survivors:
         print("  NON-EXEMPT SURVIVORS (%d):" % len(survivors))
         for mut_id, old, new, tail in survivors:

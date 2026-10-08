@@ -87,35 +87,35 @@ jobs:
       # `if: always()` on every gate, so that a failure in one does not hide the state
       # of the others. The job is red if any gate failed, and the report is the
       # complete list rather than the first casualty.
-      - name: 1/11 gate-lint --selftest
+      - name: 1/12 gate-lint --selftest
         if: always()
         run: python tools/gate-lint.py --selftest
 
-      - name: 2/11 check-catalog --selftest
+      - name: 2/12 check-catalog --selftest
         if: always()
         run: python tools/check-catalog.py --selftest
 
-      - name: 3/11 check-catalog (indexes, the six targets, link discipline)
+      - name: 3/12 check-catalog (indexes, the six targets, link discipline)
         if: always()
         run: python tools/check-catalog.py
 
-      - name: 4/11 check-catalog --scan-leaks
+      - name: 4/12 check-catalog --scan-leaks
         if: always()
         run: python tools/check-catalog.py --scan-leaks
 
-      - name: 5/11 make-manifest --check
+      - name: 5/12 make-manifest --check
         if: always()
         run: python tools/make-manifest.py --check
 
-      - name: 6/11 release-consistency (canonical anchor resolves · manifest matches)
+      - name: 6/12 release-consistency (canonical anchor resolves · manifest matches)
         if: always()
         run: python tools/verify_release_consistency.py --repo-path . --repo "${{ github.repository }}"
 
-      - name: 7/11 examples selftest (T08-S5Q2 cases + mutation suite)
+      - name: 7/12 examples selftest (T08-S5Q2 cases + mutation suite)
         if: always()
         run: python examples/T08-S5Q2/simulation.py --selftest
 
-      - name: 8/11 examples selftest (S5-Qregister blinded run + mutation suite)
+      - name: 8/12 examples selftest (S5-Qregister blinded run + mutation suite)
         if: always()
         run: python examples/S5-Qregister/simulation.py --selftest
 
@@ -130,6 +130,15 @@ jobs:
       - name: 11/12 defect-closure selftest (that gate must be able to fail too)
         if: always()
         run: python tools/defect-closure.py --selftest
+
+      # Gate 12: tools/impl-mutation.py mutates implementation.py itself
+      # (five first-order operator classes over the token stream) and requires
+      # every non-equivalent mutant to be killed by the S5 selftest, reporting
+      # a mutation score against a break threshold. Closes review round 3's
+      # "mutations around, not of, the implementation".
+      - name: 12/12 implementation-mutation (source-level watch on the artifact under test)
+        if: always()
+        run: python tools/impl-mutation.py
 
   negative-control:
     # The job *name* is load-bearing and must not be edited on its own. Branch protection
