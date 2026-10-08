@@ -1,6 +1,6 @@
 {
   "schema": "defect-ledger/1",
-  "as_of": "2026-10-07",
+  "as_of": "2026-10-08",
   "purpose": "Every defect this repository has ever found -- in its tools, in its examples, or in its own documentation -- gets one record. The record is closed only when it answers four questions mechanically: (1) what shape was the defect (class), (2) why did our checking miss it (escape_cause), (3) what root cause was changed, (4) what gate now kills this class and how that gate was shown to fire. A defect recorded as prose cannot be interrogated; a defect recorded here can be, by tools/defect-closure.py.",
   "escape_cause_taxonomy": {
     "E1": "no gate existed at the time the defect was made",
@@ -273,6 +273,20 @@
       "root_cause": "gate 10 validated the SHAPE of gate_added but never its referent; a free-text claim of a gate is indistinguishable from a real one, so a premature closure passed. The ledger was acting as authority for a check that was not there.",
       "gate_added": "defect-closure.py now extracts every path-like token from gate_added and requires it to resolve to an existing file, and any tools/*.py it names to be invoked by .githooks/pre-commit; two negative controls cover both branches (a missing gate, an unwired tool). Residual gap, stated rather than hidden: it can prove a named gate EXISTS and runs, not that the check inside it is the one described -- that stays a review-time judgement.",
       "evidence": "the two new negative controls are caught by --selftest ('does not exist' and 'no gate hook invokes'), and the real ledger passes once D-017's check is actually present in verify_release_consistency.py",
+      "siblings_scanned": true,
+      "closed": true
+    },
+    {
+      "id": "D-020",
+      "date": "2026-10-08",
+      "source": "self-test",
+      "symptom": "Gate 12 (implementation mutation) scored killed 9 / 0.818 and failed on both CI matrix jobs (python 3.9 and python 3.12) at commit fc86dc5, while the same commit reported killed 11 / 1.000 on the developer machine. Two non-exempt mutants, NUM-001 ('0' -> '1') and CMP-001 ('==' -> '!='), were reported as surviving. They had not survived -- the child interpreter never executed them.",
+      "class": "SF-013",
+      "escape_cause": "E4",
+      "found_by": "our own gates workflow, run 37729789970, on the pushed commit fc86dc5 (both matrix jobs red at gate 12) -- the first time this gate had ever run in an environment where the interpreter's bytecode cache was enabled",
+      "root_cause": "Nothing asked the gate whether its runner was executing the artifact it had just written. CPython validates a .pyc against (source mtime truncated to whole seconds, source size); a same-size mutant written back to the same path inside the same second leaves both fields unchanged, so the child re-executed stale bytecode compiled from the unmutated source and the selftest passed. The defect was invisible on the machine that developed it only because that shell had PYTHONDONTWRITEBYTECODE exported -- the remembered 'local 12/12 green' was itself an artifact of the environment, not a property of the tree.",
+      "gate_added": "tools/impl-mutation.py: the child runs with PYTHONDONTWRITEBYTECODE=1, the scratch artifact is written with newline=\"\", and a bytecode_cache_control deliberately reconstructs the stale-cache window and fails the gate when the runner reports that mutant as survived; tools/checker-mutation.py carries the same closure for the sibling tool.",
+      "evidence": "At the pre-fix revision, on one machine and one interpreter, removing PYTHONDONTWRITEBYTECODE reproduces the CI reading exactly (killed 9, score 0.818, exit 1); restoring it returns killed 11 / 1.000. With the fix in place the same cache-enabled condition reports killed 11 / 1.000 and the bytecode-cache control stays quiet, and it fires when the cache is deliberately allowed back -- so the control is load-bearing rather than decorative.",
       "siblings_scanned": true,
       "closed": true
     }

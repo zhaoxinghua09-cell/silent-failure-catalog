@@ -185,6 +185,19 @@ EXEMPT_SURVIVAL = {
     "NEG-coherence": "removal is caught by the second-order layer, not by selftest",
 }
 
+# The child interpreters must not write a bytecode cache.
+#
+# Same class as the fix in tools/impl-mutation.py (2026-10-08): CPython
+# validates a `.pyc` against (source mtime truncated to *whole seconds*,
+# source size). A mutation that keeps the file size and lands in the same
+# second as the previous run leaves both fields unchanged, so the child
+# re-executes the stale bytecode built from the *unmutated* source and a
+# watched mutation is scored as surviving. That gate reported killed 11 with
+# PYTHONDONTWRITEBYTECODE exported and killed 9 (the CI reading) without it --
+# same commit, same machine, same interpreter; this tool rewrites harness.py
+# the same way and is exposed to the same window, so it is closed here too.
+NO_BYTECODE = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+
 # One scratch package, prepared once and rewritten per variant. Nothing is
 # deleted: each run overwrites harness.py in place.
 SCRATCH = tempfile.mkdtemp(prefix="ckmut-")
@@ -197,10 +210,16 @@ def run_variant(source, verbose=False):
 
     Returns (passed: bool, tail: str).
     """
-    with open(os.path.join(PKG, "harness.py"), "w", encoding="utf-8") as fh:
+    # newline="" keeps the scratch artifact byte-identical across platforms --
+    # a stated property of this repository, not the fix for the stale cache;
+    # NO_BYTECODE stops the child from WRITING a .pyc, and there is none to
+    # read because the scratch tree is copied with __pycache__ ignored.
+    with open(os.path.join(PKG, "harness.py"), "w", encoding="utf-8",
+              newline="") as fh:
         fh.write(source)
     proc = subprocess.run([sys.executable, "harness.py"], cwd=PKG,
-                          capture_output=True, text=True, timeout=120)
+                          capture_output=True, text=True, timeout=120,
+                          env=NO_BYTECODE)
     passed = proc.returncode == 0
     tail = (proc.stdout + proc.stderr).strip().splitlines()[-3:]
     if verbose:

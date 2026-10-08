@@ -70,6 +70,28 @@ BREAK_THRESHOLD = 0.90          # mutation score must reach this
 TIMEOUT_FACTOR = 10             # mutant run > 10x baseline => timeout (counted as killed)
 FLOOR_TIMEOUT = 60              # seconds; never below this
 
+# The child interpreters must not write a bytecode cache.
+#
+# Why: CPython validates a `.pyc` against (source mtime truncated to *whole
+# seconds*, source size). Every mutant below is written back to the same path
+# inside the same second, so a mutation that keeps the file size --
+# `NUM-001 '0' -> '1'`, `NUM-002 '2' -> '3'`, `CMP-001 '==' -> '!='` -- leaves
+# both validation fields unchanged. The child then re-executes the stale .pyc
+# built from the *unmutated* source, the selftest passes, and a mutant that
+# the suite does watch is scored "survived".
+#
+# This is not hypothetical. Measured 2026-10-08 at `fc86dc5`, on one machine
+# and one interpreter: the gate reported killed 11 / 1.000 with
+# PYTHONDONTWRITEBYTECODE exported, and killed 9 / 0.818 -- the reading CI
+# reported on both `gates · python 3.9` and `gates · python 3.12` -- once that
+# one variable was removed. The harness was silently watching a cached copy of
+# the artifact instead of the artifact, which is the exact failure shape this
+# repository catalogs. `PYTHONDONTWRITEBYTECODE=1` is `-B` for the subprocess:
+# it stops the *writing*. It does not stop *reading* an already-valid cache, so
+# the scratch tree is additionally copied with `__pycache__` ignored. Both
+# halves are needed; either one alone leaves the window open.
+NO_BYTECODE = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+
 # Survivors are only tolerated with an explicit, inspectable reason.
 # (Populated after the first full run; every entry must justify why the
 # mutation is semantically equivalent *for this fixture*, not "harmless".)
@@ -147,15 +169,32 @@ PKG = os.path.join(SCRATCH, "S5-Qregister")
 shutil.copytree(S5_DIR, PKG, ignore=shutil.ignore_patterns("__pycache__"))
 
 
-def run_variant(source, timeout):
-    """Write *source* as implementation.py in the scratch copy, run selftest."""
-    with open(os.path.join(PKG, "implementation.py"), "w", encoding="utf-8") as fh:
+def run_variant(source, timeout, pin_mtime=None):
+    """Write *source* as implementation.py in the scratch copy, run selftest.
+
+    ``pin_mtime`` back-dates the scratch file to a whole second. It exists so
+    the bytecode-cache control below can reconstruct, deliberately, the exact
+    window in which CPython would reuse a stale ``.pyc`` -- a window that the
+    default writer hits by accident whenever a same-size mutant lands in the
+    same second as the previous run.
+    """
+    # `newline=""` keeps the scratch artifact byte-identical across platforms --
+    # a property this repository states elsewhere, and NOT the fix for the stale
+    # cache: with the default newline both the previous and the current variant
+    # are inflated the same way, so the (mtime, size) comparison still matches.
+    # NO_BYTECODE stops the child from WRITING a .pyc; there is none to read,
+    # because the scratch tree is copied with __pycache__ ignored. Both halves
+    # are needed -- -B alone still reads an already-valid .pyc.
+    path = os.path.join(PKG, "implementation.py")
+    with open(path, "w", encoding="utf-8", newline="") as fh:
         fh.write(source)
+    if pin_mtime is not None:
+        os.utime(path, (pin_mtime, pin_mtime))
     t0 = time.time()
     try:
         proc = subprocess.run([sys.executable, "simulation.py", "--selftest"],
                               cwd=PKG, capture_output=True, text=True,
-                              timeout=timeout)
+                              timeout=timeout, env=NO_BYTECODE)
         elapsed = time.time() - t0
         passed = proc.returncode == 0
         tail = (proc.stdout + proc.stderr).strip().splitlines()[-2:]
@@ -163,6 +202,46 @@ def run_variant(source, timeout):
                     tail=" / ".join(tail))
     except subprocess.TimeoutExpired:
         return dict(result="timeout", elapsed=timeout, tail="(timeout)")
+
+
+def bytecode_cache_control(base, timeout):
+    """Grounding: the runner must be watching the artifact, not a cached copy.
+
+    Takes the first same-size mutant, writes it into the scratch package and
+    back-dates the file to the whole second it already carries -- the exact
+    state in which CPython validates a `.pyc` as current and executes the
+    *unmutated* module. The mutant is one the suite watches, so the child must
+    FAIL. If it passes, the runner is reading a bytecode cache and every
+    "survived" verdict above it is untrustworthy.
+
+    Measured on 2026-10-08, at commit `fc86dc5`, on one machine and one
+    interpreter (CPython 3.13.12 on Windows): with PYTHONDONTWRITEBYTECODE
+    exported the gate reported killed 11 / score 1.000; with that single
+    variable removed -- same commit, same platform, same interpreter -- it
+    reported killed 9 / score 0.818, which is the reading CI produced. The
+    interpreter's bytecode cache, not the operating system, is the variable:
+    with the cache enabled the child writes `implementation.cpython-*.pyc`
+    into the scratch tree, and a same-size mutant written in the same whole
+    second reuses it. CI does not disable the cache, so the gate was red there
+    by default and looked green only in the shell it was developed in.
+    Deliberately reconstructing the window makes that class a checked property
+    instead of an accident of the shell.
+    """
+    for mut_id, s, e, new, _old in candidate_mutations(base)[0]:
+        mutated = source_splice(base, s, e, new)
+        if len(mutated) == len(base):
+            break
+    else:
+        return ["bytecode-cache control: no same-size mutant available -- the "
+                "control cannot reconstruct the stale-cache window"]
+    sec = int(os.stat(os.path.join(PKG, "implementation.py")).st_mtime)
+    res = run_variant(mutated, timeout, pin_mtime=sec)
+    if res["result"] == "pass":
+        return ["bytecode-cache control: a same-size mutant %s pinned to the "
+                "scratch file's own whole second was reported SURVIVED -- the "
+                "runner executed a stale .pyc, so it was watching a cached "
+                "copy of the artifact rather than the artifact" % mut_id]
+    return []
 
 
 def main():
@@ -203,6 +282,15 @@ def main():
     failures = []
     killed = timeout_killed = survived = 0
     survivors = []
+
+    # Grounding, alongside SENTINEL-noop / SENTINEL-fatal: the runner must be
+    # watching the artifact rather than a cached copy of it. Run first, so a
+    # cached-copy runner is named instead of quietly inflating the survivor
+    # list with mutants that were never actually executed.
+    cache_failures = bytecode_cache_control(base, timeout)
+    print("  bytecode-cache control                 -> %s"
+          % ("FAILED" if cache_failures else "ok (runner sees the artifact)"))
+    failures.extend(cache_failures)
 
     for mut_id, s, e, new, old in mutants:
         if new == old:  # SENTINEL-noop: the first (and only) identity mutant
