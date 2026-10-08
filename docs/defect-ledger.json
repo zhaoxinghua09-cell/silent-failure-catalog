@@ -317,6 +317,20 @@
       "evidence": "Two readings on one machine and one interpreter. With the cache enabled the scratch package produces only the imported module's bytecode file and no harness one; a same-size mutant pinned to the same whole second exits 1 (killed) under both cache conditions; and the full gate returns exit 0 either way, including when its isolation is removed by patch (the run opened with 'baseline selftest (unmutated) -> PASS' and closed with 'S9 PASSED').",
       "siblings_scanned": true,
       "closed": true
+    },
+    {
+      "id": "D-023",
+      "date": "2026-10-08",
+      "source": "self-test",
+      "symptom": "One hook run printed, in the same screen, `─ gate 计数：✅ 活文档与真源一致（15 道）` directly above `═ 判定：❌ 不一致 ——` and its `❌ .github/workflows/gates.yml：声明 five gates，但真源 .githooks/pre-commit 有 15 道`. The section summary declared its section green while that section had just gone red. The failure itself was caught -- it entered the failure list, the verdict and the exit code -- so nothing was structurally lost, which is exactly why it went unnoticed: the run was red, the log was honest two lines below, and only the summary line lied. A reader who scans the section lines, or a log scraper keyed on a green tick, concludes the gate count is consistent.",
+      "class": "SF-011",
+      "escape_cause": "E4",
+      "found_by": "this round, while adding gates 14 and 15 -- the count check fired because a bare `five gates` had been written into the CI workflow's prose, and the summary line sitting above it stayed green. The two had never been seen together, because this check had never failed on this tree before.",
+      "root_cause": "The section summary was computed from `n_gates` -- is the canonical source readable -- instead of from the section's own failure list. `n_gates` is 15 for every tree that has a hook, so the green branch was taken on every input except a missing `.githooks/pre-commit`: the line could not go red for the failure it sat next to. The count check's findings were appended to the shared failure list correctly, which is why the verdict and the exit code disagreed with the summary rather than with the facts. Nothing required a section summary to be derived from its section's result, and nothing had ever shown this one able to fail -- which is the generalisable part: a status line that has never been seen red has not been shown to be capable of going red.",
+      "gate_added": "tools/verify_release_consistency.py now collects the count check's outcome in its own list and prints the section line from it -- red when the section failed, red when the canonical source is missing, green only otherwise. No new gate was added: the gate that already existed, invoked by both .githooks/pre-commit and .github/workflows/gates.yml, was repaired, so the repair reaches the same places every other gate does.",
+      "evidence": "Both states were read from the same line on a throwaway copy of the working tree. Pristine: `─ gate 计数：✅ 活文档与真源一致（15 道）`. With a bare `five gates` prepended to the CI workflow: `─ gate 计数：❌ 活文档与真源不一致（真源 15 道）` -- the summary now follows the verdict instead of contradicting it. The control driver lives at `_diag_ci_20261008/exp7_count_summary_contradiction.py` in the FG-TIDA working folder and asserts that the failing state's summary contains no green tick. The pre-fix contradiction was observed live in this round's hook output and is quoted verbatim in the symptom above.",
+      "siblings_scanned": true,
+      "closed": true
     }
   ]
 }

@@ -251,23 +251,30 @@ def main():
                      "v0.1.0 就是这样带着过期 manifest 发布的）")
 
     # 6) gate 计数一致性（rule 15 —— 计数只许出现在一处）
+    # 本节的失败单独收集：摘要行必须看本节的结论，不能只看「真源读到了没有」。
+    # 2026-10-08 实证（D-023）：`.github/workflows/gates.yml` 当时写着 "five gates"，
+    # 本节判 ❌，摘要行却仍打印「✅ 活文档与真源一致（15 道）」—— 摘要说绿、判定说红，
+    # 只看摘要的读者（或解析日志的下游）会得到相反的结论。这与 v0.1.0 那次
+    # 「门打印 ✅ 并 exit 0」是同一个病，只是换到了摘要行上。
+    count_fails = []
     n_gates = gate_count(rp)
     if n_gates is None:
-        fails.append(".githooks/pre-commit 不存在 —— 无法确定 gate 数（真源缺失）")
+        count_fails.append(".githooks/pre-commit 不存在 —— 无法确定 gate 数（真源缺失）")
     else:
         for name in GATE_COUNT_DOCS:
             text = read(os.path.join(rp, name))
             if text is None:
                 # a listed document that cannot be read is a failure, not a skip (rule 12)
-                fails.append("%s：被列为计数受检文件却读不到（rule 12：跑不起来的检查=失败）"
-                             % name)
+                count_fails.append("%s：被列为计数受检文件却读不到（rule 12：跑不起来的检查=失败）"
+                                   % name)
                 continue
             for m in _COUNT_RE.finditer(text):
                 tok = m.group(1).lower()
                 val = int(tok) if tok.isdigit() else _COUNT_WORDS.get(tok)
                 if val is not None and val != n_gates:
-                    fails.append("%s：声明 %s gates，但真源 .githooks/pre-commit 有 %d 道"
-                                 "（rule 15：计数只许出现在一处）" % (name, tok, n_gates))
+                    count_fails.append("%s：声明 %s gates，但真源 .githooks/pre-commit 有 %d 道"
+                                       "（rule 15：计数只许出现在一处）" % (name, tok, n_gates))
+    fails.extend(count_fails)
 
     # 7) 远程 tag 自洽
     remote_note = "未启用（无仓上下文或 --no-remote）"
@@ -302,8 +309,13 @@ def main():
     if mm_code != 0:
         for line in mm_out.splitlines():
             print("      " + line)
-    print("─ gate 计数：%s" % ("✅ 活文档与真源一致（%d 道）" % n_gates if n_gates
-                              else "❌ 真源 .githooks/pre-commit 缺失"))
+    if n_gates is None:
+        count_note = "❌ 真源 .githooks/pre-commit 缺失"
+    elif count_fails:
+        count_note = "❌ 活文档与真源不一致（真源 %d 道）" % n_gates
+    else:
+        count_note = "✅ 活文档与真源一致（%d 道）" % n_gates
+    print("─ gate 计数：%s" % count_note)
     print("═ 远程 tag 校验：%s" % remote_note)
 
     if fails:

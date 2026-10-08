@@ -23,6 +23,17 @@
 #      it goes stale the moment the anchor moves (2026-10-07 -- the literal
 #      `--ref v0.1.0` sat in three call sites at once).
 #
+#   2026-10-08: gates 14 and 15 join -- tools/check-gate-parity.py is the first
+#   gate that watches the gate list itself. This hook is the specification and
+#   `.github/workflows/gates.yml` is its echo, but nothing compared the two:
+#   the 2026-09-30 drift (this list ran five gates while CI ran six) was found
+#   by a human counting, which is the failure shape this repository catalogs,
+#   one level up. Gate 14 runs the checker's own selftest -- a parity gate that
+#   cannot fail would be that same defect again. Gate 15 compares the two real
+#   lists and fails on a missing gate, a changed argument, or a stale `N/M`
+#   label. The single declared difference (gate 6 runs offline here and with an
+#   API token in CI) is an exact tuple, so editing either side breaks the
+#   exception instead of quietly widening it.
 #   2026-10-08: gate 13 joins -- tools/check-line-endings.py scans the INDEX
 #   blobs for CRLF. `.gitattributes` is `* -text`, so git performs no
 #   end-of-line conversion at all: without this gate a CRLF file enters the
@@ -102,6 +113,8 @@ run "defect closure"            tools/defect-closure.py
 run "defect closure selftest"   tools/defect-closure.py --selftest
 run "implementation mutation"   tools/impl-mutation.py
 run "line endings"              tools/check-line-endings.py
+run "gate parity selftest"      tools/check-gate-parity.py --selftest
+run "gate parity hook-vs-ci"    tools/check-gate-parity.py
 
 if [ "$fail" -ne 0 ]; then
     echo "" >&2

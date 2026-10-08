@@ -15,6 +15,11 @@ name: gates
 # one place, and a hard-coded number in this file would be a second source of truth.
 # (The `N/M` step labels are the exception -- they are structural, and they are what
 # makes a stale sync between the two lists visible.)
+# (As of 2026-10-08 that visibility is enforced rather than hoped for: gates 14 and
+# 15 run tools/check-gate-parity.py, which compares this file against the hook and
+# fails on any difference -- a missing gate, a changed argument, or a stale `N/M`
+# label. The 2026-09-30 drift was found by a human counting; the next one will not
+# need one.)
 # (Gate 10 runs tools/defect-closure.py, added 2026-10-07: it reads
 # docs/defect-ledger.json and fails if any recorded defect is open or missing
 # evidence, so a correction cannot be closed by editing only the named site.)
@@ -87,47 +92,47 @@ jobs:
       # `if: always()` on every gate, so that a failure in one does not hide the state
       # of the others. The job is red if any gate failed, and the report is the
       # complete list rather than the first casualty.
-      - name: 1/13 gate-lint --selftest
+      - name: 1/15 gate-lint --selftest
         if: always()
         run: python tools/gate-lint.py --selftest
 
-      - name: 2/13 check-catalog --selftest
+      - name: 2/15 check-catalog --selftest
         if: always()
         run: python tools/check-catalog.py --selftest
 
-      - name: 3/13 check-catalog (indexes, the six targets, link discipline)
+      - name: 3/15 check-catalog (indexes, the six targets, link discipline)
         if: always()
         run: python tools/check-catalog.py
 
-      - name: 4/13 check-catalog --scan-leaks
+      - name: 4/15 check-catalog --scan-leaks
         if: always()
         run: python tools/check-catalog.py --scan-leaks
 
-      - name: 5/13 make-manifest --check
+      - name: 5/15 make-manifest --check
         if: always()
         run: python tools/make-manifest.py --check
 
-      - name: 6/13 release-consistency (canonical anchor resolves · manifest matches)
+      - name: 6/15 release-consistency (canonical anchor resolves · manifest matches)
         if: always()
         run: python tools/verify_release_consistency.py --repo-path . --repo "${{ github.repository }}"
 
-      - name: 7/13 examples selftest (T08-S5Q2 cases + mutation suite)
+      - name: 7/15 examples selftest (T08-S5Q2 cases + mutation suite)
         if: always()
         run: python examples/T08-S5Q2/simulation.py --selftest
 
-      - name: 8/13 examples selftest (S5-Qregister blinded run + mutation suite)
+      - name: 8/15 examples selftest (S5-Qregister blinded run + mutation suite)
         if: always()
         run: python examples/S5-Qregister/simulation.py --selftest
 
-      - name: 9/13 checker-mutation (the checks themselves must be able to fail)
+      - name: 9/15 checker-mutation (the checks themselves must be able to fail)
         if: always()
         run: python tools/checker-mutation.py
 
-      - name: 10/13 defect-closure (every recorded correction is closed with evidence)
+      - name: 10/15 defect-closure (every recorded correction is closed with evidence)
         if: always()
         run: python tools/defect-closure.py
 
-      - name: 11/13 defect-closure selftest (that gate must be able to fail too)
+      - name: 11/15 defect-closure selftest (that gate must be able to fail too)
         if: always()
         run: python tools/defect-closure.py --selftest
 
@@ -136,7 +141,7 @@ jobs:
       # every non-equivalent mutant to be killed by the S5 selftest, reporting
       # a mutation score against a break threshold. Closes review round 3's
       # "mutations around, not of, the implementation".
-      - name: 12/13 implementation-mutation (source-level watch on the artifact under test)
+      - name: 12/15 implementation-mutation (source-level watch on the artifact under test)
         if: always()
         run: python tools/impl-mutation.py
 
@@ -146,9 +151,30 @@ jobs:
       # because the bytes are byte-exact on checkout. The check reads the index
       # and never the working tree -- an LF working tree looks green while the
       # index still holds the CRLF that the next commit would record (D-021).
-      - name: 13/13 line endings (the index carries no CRLF)
+      - name: 13/15 line endings (the index carries no CRLF)
         if: always()
         run: python tools/check-line-endings.py
+
+      # Gates 14 and 15: tools/check-gate-parity.py is the first gate that
+      # watches the gate list itself. This file and `.githooks/pre-commit` are
+      # two hand-written copies of one list, and until now nothing compared
+      # them -- the 2026-09-30 drift was found because a human sat down and
+      # counted the two lists against each other. The `N/M` labels above exist
+      # to make the next drift visible; a label that nothing reads is not a
+      # check, so gate 15 reads them.
+      # The one declared difference -- gate 6 runs offline in the hook and with
+      # an API token here -- is an exact (script, hook args, CI args) tuple
+      # inside the checker, so editing either side breaks the exception instead
+      # of silently widening it. Gate 14 runs the checker's own selftest,
+      # because a parity gate that cannot fail would be that same defect one
+      # level up.
+      - name: 14/15 gate-parity selftest (that gate must be able to fail too)
+        if: always()
+        run: python tools/check-gate-parity.py --selftest
+
+      - name: 15/15 gate-parity (the hook and this file run the same gates)
+        if: always()
+        run: python tools/check-gate-parity.py
 
   negative-control:
     # The job *name* is load-bearing and must not be edited on its own. Branch protection
