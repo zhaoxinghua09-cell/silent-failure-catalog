@@ -54,9 +54,13 @@ Known limit
   Closing the first and third shapes properly needs a single source of gates
   with both lists generated from it, so that "the two sides agree" stops being
   evidence of anything. That is a larger change and lives outside this file
-  (P2 in the workspace diagnosis). Until then, what remains over those two
-  holes is the reviewer and branch protection on the CI job -- weaker than a
-  gate, and stated here rather than implied.
+  (P2 in the workspace diagnosis). Until then, two things are sometimes offered
+  as cover over those holes -- the reviewer, and branch protection on the CI
+  job -- and neither one is a gate. The reviewer is a process. Branch protection
+  was measured on 2026-10-08 and does not hold either: the rule does require
+  three status checks, but `enforce_admins` is off and the account that pushes
+  here is the admin, so a direct push lands with "Bypassed rule violations"
+  while those checks are still running. Stated here rather than implied.
 
 Reading `gates.yml`
   This repository is stdlib-only and Python ships no YAML parser, so the
