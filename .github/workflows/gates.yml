@@ -97,51 +97,54 @@ jobs:
       # Every gate carries `if: always()` so that a failure in one does not hide
       # the state of the others: the job is red if any gate failed, and the report
       # is the complete list rather than the first casualty.
-      - name: "1/15 gate-lint selftest"
+      - name: "1/16 gate-lint selftest"
         if: always()
         run: python tools/gate-lint.py --selftest
-      - name: "2/15 catalog selftest"
+      - name: "2/16 catalog selftest"
         if: always()
         run: python tools/check-catalog.py --selftest
-      - name: "3/15 catalog consistency (indexes, the six targets, link discipline)"
+      - name: "3/16 catalog consistency (indexes, the six targets, link discipline)"
         if: always()
         run: python tools/check-catalog.py
-      - name: "4/15 de-identification scan"
+      - name: "4/16 de-identification scan"
         if: always()
         run: python tools/check-catalog.py --scan-leaks
-      - name: "5/15 content manifest"
+      - name: "5/16 content manifest"
         if: always()
         run: python tools/make-manifest.py --check
-      - name: "6/15 release consistency (canonical anchor resolves · manifest matches)"
+      - name: "6/16 release consistency (canonical anchor resolves · manifest matches)"
         if: always()
         run: python tools/verify_release_consistency.py --repo-path . --repo "${{ github.repository }}"
-      - name: "7/15 examples selftest (T08-S5Q2 cases + mutation suite)"
+      - name: "7/16 examples selftest (T08-S5Q2 cases + mutation suite)"
         if: always()
         run: python examples/T08-S5Q2/simulation.py --selftest
-      - name: "8/15 blinded example selftest (S5-Qregister blinded run + mutation suite)"
+      - name: "8/16 blinded example selftest (S5-Qregister blinded run + mutation suite)"
         if: always()
         run: python examples/S5-Qregister/simulation.py --selftest
-      - name: "9/15 checker mutation (the checks themselves must be able to fail)"
+      - name: "9/16 checker mutation (the checks themselves must be able to fail)"
         if: always()
         run: python tools/checker-mutation.py
-      - name: "10/15 defect closure (every recorded correction is closed with evidence)"
+      - name: "10/16 defect closure (every recorded correction is closed with evidence)"
         if: always()
         run: python tools/defect-closure.py
-      - name: "11/15 defect closure selftest (that gate must be able to fail too)"
+      - name: "11/16 defect closure selftest (that gate must be able to fail too)"
         if: always()
         run: python tools/defect-closure.py --selftest
-      - name: "12/15 implementation mutation (source-level watch on the artifact under test)"
+      - name: "12/16 implementation mutation (source-level watch on the artifact under test)"
         if: always()
         run: python tools/impl-mutation.py
-      - name: "13/15 line endings (the index carries no CRLF)"
+      - name: "13/16 line endings (the index carries no CRLF)"
         if: always()
         run: python tools/check-line-endings.py
-      - name: "14/15 gate parity selftest (that gate must be able to fail too)"
+      - name: "14/16 gate parity selftest (that gate must be able to fail too)"
         if: always()
         run: python tools/check-gate-parity.py --selftest
-      - name: "15/15 gate parity hook-vs-ci (the hook and this file run the same gates)"
+      - name: "15/16 gate parity hook-vs-ci (the hook and this file run the same gates)"
         if: always()
         run: python tools/check-gate-parity.py
+      - name: "16/16 prepare selftest (the ordering and its limits must be able to fail)"
+        if: always()
+        run: python tools/prepare.py --selftest
 
       # END GENERATED GATE STEPS
 

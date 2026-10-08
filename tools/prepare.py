@@ -22,10 +22,22 @@ it never commits -- the commit stays a deliberate act with a written message.
 
 The rule this file obeys
 ------------------------
-It is **not** a gate and must never be added to `.githooks/pre-commit`: it calls
-the hook, so listing it there would recurse. It lives beside the gates because
-it answers "which one do I run first", and that answer belongs next to the
-question it answers.
+The **pipeline** must never be added to `.githooks/pre-commit`: it calls the
+hook, so listing it there would recurse, and the `PREPARE_ACTIVE` sentinel below
+turns that into a refusal instead of a hang.
+
+The **`--selftest`** is the other half, and it *is* gate 16. It builds its own
+throw-away repositories and never calls the real hook, so there is nothing to
+recurse into. It stayed out of the gate list for exactly one commit, and in that
+commit the thirteen things below about what this tool can fail at were enforced
+by nobody -- prose about a tool, which is the shape this repository keeps finding
+one level up.
+
+Being a gate has one consequence worth stating here: `selftest()` clears
+`PREPARE_ACTIVE` for its own duration. It calls `main()`, and `main()` is where
+the sentinel is checked, so without that gate 16 would go red every time
+`prepare.py` ran its own `verify()` -- the tool deadlocking against the gate list
+it exists to satisfy.
 
 Known limits
 ------------
@@ -489,6 +501,14 @@ def selftest(tmpdir=None, out=None):
     tmp = Path(tempfile.mkdtemp(prefix="prepare-selftest-",
                                 dir=str(tmpdir) if tmpdir else None))
 
+    # Gate 16 runs this selftest from inside a hook -- including from inside
+    # prepare.py's own verify(), which exports PREPARE_ACTIVE. The sentinel
+    # guards the *pipeline* against recursing; a selftest is not a pipeline. But
+    # the controls below call main(), which is where the sentinel is checked, so
+    # it has to step out of the way for the duration. Otherwise the `--check`
+    # control sees exit 3 instead of 0 and gate 16 goes red on every prepare run.
+    sentinel_for_selftest = os.environ.pop(SENTINEL_ENV, None)
+
     # --- positive control: a consistent tree verifies clean ----------------- #
     r0 = _make_synthetic(tmp / "clean")
     _syn_gen(r0)
@@ -614,6 +634,11 @@ def selftest(tmpdir=None, out=None):
         out.write("  %-4s %-52s %s\n" % ("OK" if ok else "BAD", title, detail))
         if not ok:
             n_bad += 1
+
+    # The sentinel is put back before the control that tests it. Everything above
+    # deliberately ran without it; from here on the environment is as it was found.
+    if sentinel_for_selftest is not None:
+        os.environ[SENTINEL_ENV] = sentinel_for_selftest
 
     # --- recursion sentinel: must refuse when it is already inside a hook --- #
     saved = os.environ.get(SENTINEL_ENV)

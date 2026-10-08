@@ -58,6 +58,18 @@
 #   bytes are byte-exact on checkout. It reads the index and never the working
 #   tree -- a tree normalized to LF looks green while the index still holds the
 #   CRLF the next commit would record (D-021).
+#   2026-10-08: gate 16 joins -- tools/prepare.py --selftest. prepare.py's
+#   *pipeline* must never be listed here: it calls this hook, so listing it
+#   would recurse, and the PREPARE_ACTIVE sentinel turns that into a refusal
+#   instead of a hang. Its `--selftest` is the other half -- it builds its own
+#   throw-away repositories and never calls this hook. Until it joined, the
+#   thirteen things prepare.py claims it can fail at were enforced by nothing:
+#   prose about a tool, which is the shape this repository keeps finding one
+#   level up. It costs about eight seconds. One consequence is worth writing
+#   down: the selftest clears PREPARE_ACTIVE for its own duration, because it
+#   calls main(), which is where the sentinel is checked -- without that, gate
+#   16 would go red every time prepare.py ran its own verify, deadlocking the
+#   tool against the gate list it exists to satisfy.
 #   2026-10-08: gate 12 joins -- tools/impl-mutation.py systematically mutates
 #   implementation.py itself (five first-order operator classes) and requires
 #   every non-equivalent mutant to be killed by the S5 selftest; the artifact
@@ -145,6 +157,7 @@ run "implementation mutation"     "source-level watch on the artifact under test
 run "line endings"                "the index carries no CRLF" tools/check-line-endings.py
 run "gate parity selftest"        "that gate must be able to fail too" tools/check-gate-parity.py --selftest
 run "gate parity hook-vs-ci"      "the hook and this file run the same gates" tools/check-gate-parity.py
+run "prepare selftest"            "the ordering and its limits must be able to fail" tools/prepare.py --selftest
 
 if [ "$fail" -ne 0 ]; then
     echo "" >&2
