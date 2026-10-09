@@ -92,12 +92,14 @@ counted separately -- they are not PASS, and they are not silent.
 
 import argparse
 import json
+import io
 import os
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 
 VERSION = r"(\d+\.\d+\.\d+)"
@@ -139,6 +141,10 @@ IGNORED_VERSION_LINES = [
      "the Citation File Format schema version, not this release"),
 ]
 ZENODO_API = "https://zenodo.org/api/records"
+# An unauthenticated caller is capped at 25 records per page, so a concept with
+# more versions than fit in one page is walked rather than assumed small. 20 pages
+# is 500 versions; a software catalogue that reaches that is not this one.
+ZENODO_PAGE_LIMIT = 20
 WORKFLOW_DIR = os.path.join(".github", "workflows")
 
 
@@ -439,29 +445,64 @@ class RealAPI(object):
         ctxs = (payload.get("required_status_checks") or {}).get("contexts") or []
         return (list(ctxs), "%d required check(s)" % len(ctxs))
 
+    def _open(self, req, timeout=90):
+        """The single place this class touches the network.
+
+        Split out so the selftest can drive the *transport* failure paths
+        (a rejection, a paginated concept) without monkey-patching urllib for
+        every other test in the file.
+        """
+        return urllib.request.urlopen(req, timeout=timeout)
+
     def zenodo_records(self, concept_doi):
-        url = "%s?q=conceptdoi:%%22%s%%22&size=100&all_versions=true" % (
-            ZENODO_API, concept_doi)
-        req = urllib.request.Request(url, headers={
-            "Accept": "application/json", "User-Agent": "verify_release_face"})
-        try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
-                body = resp.read().decode("utf-8", "replace")
-        except Exception as e:  # noqa: BLE001 - any transport failure is the message
-            return (None, "Zenodo API unreachable from here (%s)" % e)
-        try:
-            data = json.loads(body)
-        except ValueError as e:
-            return (None, "Zenodo returned non-JSON (%s)" % e)
+        # Unauthenticated callers are capped at 25 records per page. Asking for
+        # 100 is not a larger request, it is a rejected one: on 2026-10-09 this
+        # probe asked for `size=100` against the concept DOI and Zenodo answered
+        # 400 -- {"status":400,"message":"A validation error occurred.",
+        # "errors":[{"field":"size","messages":["Page size cannot be greater than
+        # 25. Please use authenticated requests to increase the limit to 100."]}]}
+        # -- which the blanket `except` below turned into "Zenodo API unreachable
+        # from here". A wrong cause, printed as a finding, is how a real defect
+        # survives: the reader goes looking at the network. So the pages are
+        # walked instead of assumed, the query names the field Zenodo indexes for
+        # this (`conceptrecid`, not the concept DOI string), and an HTTP status is
+        # reported as a refusal that carries its own code and body.
         out = []
-        for hit in data.get("hits", {}).get("hits", []):
-            md = hit.get("metadata") or {}
-            out.append({
-                "doi": hit.get("doi"),
-                "version": md.get("version"),
-                "published": bool(hit.get("submitted")),
-                "created": hit.get("created") or "",
-            })
+        url = "%s?q=conceptrecid:%s&allversions=true&size=25" % (
+            ZENODO_API, zenodo_id(concept_doi))
+        for _ in range(ZENODO_PAGE_LIMIT):
+            req = urllib.request.Request(url, headers={
+                "Accept": "application/json", "User-Agent": "verify_release_face"})
+            try:
+                with self._open(req) as resp:
+                    body = resp.read().decode("utf-8", "replace")
+            except urllib.error.HTTPError as e:
+                try:
+                    detail = e.read().decode("utf-8", "replace").strip()[:300]
+                except Exception:                        # noqa: BLE001
+                    detail = ""
+                return (None, "Zenodo refused the request (HTTP %s): %s"
+                              % (e.code, detail or "(no body)"))
+            except Exception as e:  # noqa: BLE001 - any other transport failure is the message
+                return (None, "Zenodo API unreachable from here (%s)" % e)
+            try:
+                data = json.loads(body)
+            except ValueError as e:
+                return (None, "Zenodo returned non-JSON (%s)" % e)
+            for hit in ((data or {}).get("hits") or {}).get("hits") or []:
+                md = hit.get("metadata") or {}
+                out.append({
+                    "doi": hit.get("doi"),
+                    "version": md.get("version"),
+                    "published": bool(hit.get("submitted")),
+                    "created": hit.get("created") or "",
+                })
+            # The API hands back the next page as a link; follow it rather than
+            # synthesising `page=2`, so the walk follows the index's own ordering.
+            nxt = ((data or {}).get("links") or {}).get("next") or ""
+            if not nxt:
+                break
+            url = nxt
         return (out, "%d record(s)" % len(out))
 
 
@@ -617,6 +658,25 @@ def run_remote(repo_path, repo, api, facts, fails, not_verified, zenodo=True,
             fails.append("R3: the in-tree archive line says version %s for DOI "
                          "%s, but the record says %s"
                          % (facts.get("archived_version"), arch, got))
+        # That check only proves the sentence does not lie about the record it
+        # names. It says nothing about *which* record it names, and an archive line
+        # that still points at the previous version passes it. On 2026-10-09 the
+        # README sent readers to the 0.1.0 DOI while 0.1.2 sat published beside it
+        # under the same concept, and this gate was green -- because "a record
+        # carrying the release version exists" and "the repository points at it"
+        # are two different claims, and only the first was checked. The repository's
+        # own sentence settles the intent: "the newest archived version is the 0.1.0
+        # record; INTEGRITY.md is updated in the same move as the DOI". So when a
+        # record carrying the release version exists, the archive line must be it.
+        newest = [r for r in recs
+                  if r.get("version") == facts["release"] and r.get("published")]
+        if newest and got != facts["release"]:
+            fails.append(
+                "R3: the archive line names DOI %s (version %s) while concept %s "
+                "already holds a record carrying the release version %s (%s) -- "
+                "readers are being sent to a superseded archive"
+                % (arch, got, facts["concept"], facts["release"],
+                   ", ".join(sorted(r["doi"] for r in newest if r.get("doi")))))
     declared = [r for r in recs if r.get("version") == facts["release"]
                 and r.get("published")]
     if not declared:
@@ -646,12 +706,12 @@ GOOD = {
         "# Synthetic\n\n"
         "**Canonical citation: the immutable release tag `v9.9.9`** -- and `v9.9.8` "
         "is superseded.\n\n"
-        "Archived at Zenodo with DOI **10.5281/zenodo.11111111** (version 9.9.8, "
-        "2026-01-02; concept DOI **10.5281/zenodo.11111110**).\n"),
+        "Archived at Zenodo with DOI **10.5281/zenodo.11111112** (version 9.9.9, "
+        "2026-01-03; concept DOI **10.5281/zenodo.11111110**).\n"),
     "INTEGRITY.md": (
         "# Synthetic integrity\n\n"
-        "- Archived at Zenodo: DOI **10.5281/zenodo.11111111** (concept "
-        "**10.5281/zenodo.11111110**), version 9.9.8, 2026-01-02.\n"
+        "- Archived at Zenodo: DOI **10.5281/zenodo.11111112** (concept "
+        "**10.5281/zenodo.11111110**), version 9.9.9, 2026-01-03.\n"
         "- Canonical pin for citations: **immutable release tag `v9.9.9`** (see "
         "README).\n"),
     ".zenodo.json": json.dumps({
@@ -768,12 +828,74 @@ def _build(root, overrides=None, drop=None):
             fh.write(body)
 
 
+class _FakeResp(object):
+    def __init__(self, body, status=200):
+        self._b = io.BytesIO(body.encode("utf-8") if isinstance(body, str) else body)
+        self.status = status
+
+    def read(self):
+        return self._b.read()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+class _TransportAPI(RealAPI):
+    """RealAPI with only its network edge replaced.
+
+    The Zenodo face of RealAPI never touches the repository, so the transport
+    paths -- a rejection, a paginated concept -- can be driven through the real
+    implementation instead of through a stub that returns a canned tuple. That
+    distinction is the point: a stub that returns `(records, "%d record(s)")`
+    cannot express "the API refused this request", which is how the wrong-cause
+    defect of 2026-10-09 stayed invisible to 25 passing cases.
+    """
+
+    def __init__(self, pages=None, reject=None, repo="owner/name"):
+        super(_TransportAPI, self).__init__(repo)
+        self.pages = list(pages or [])
+        self.reject = reject
+        self.calls = {"zen": 0}
+        # Inheriting RealAPI also inherits its `gh` half, which shells out to the
+        # real GitHub. These cases are about the Zenodo transport, so that half is
+        # stubbed: otherwise the case runs a live `gh api` against a repository
+        # that does not exist and hangs until the runner kills it.
+        self._gh_stub = FakeAPI()
+
+    def tag_exists(self, tag):
+        return self._gh_stub.tag_exists(tag)
+
+    def release_exists(self, tag):
+        return self._gh_stub.release_exists(tag)
+
+    def branch_protected(self):
+        return self._gh_stub.branch_protected()
+
+    def required_checks(self):
+        return self._gh_stub.required_checks()
+
+    def _open(self, req, timeout=90):
+        self.calls["zen"] += 1
+        if self.reject is not None:
+            code, body = self.reject
+            raise urllib.error.HTTPError(req.full_url, code, "refused", {},
+                                         io.BytesIO(body.encode("utf-8")))
+        if not self.pages:
+            raise AssertionError("the case asked for more pages than it supplied")
+        body, status = self.pages.pop(0)
+        return _FakeResp(body, status)
+
+
 def selftest():
     cases = []
 
     def run_case(cid, what, override=None, drop=None, api=None, zenodo=True,
                  want_fail=True, expect_api_calls=None, want_nv=0,
-                 want_harness_error=False):
+                 want_harness_error=False, want_fail_text=None,
+                 forbid_fail_text=None):
         root = tempfile.mkdtemp(prefix="face-%s-" % cid)
         harness = []
         try:
@@ -803,20 +925,31 @@ def selftest():
                             got = a.calls[k]
                             if got < want:
                                 harness.append(
-                                    "the fake API was called %d time(s), "
+                                    "the fake API was called %d time(s) for %r, "
                                     "expected >= %d -- the code reached the "
                                     "real network instead of the stub"
-                                    % (k, got, want))
+                                    % (got, k, want))
         finally:
             shutil.rmtree(root, ignore_errors=True)
         got_fail = bool(fails)
+        # A case may also pin the *reason*, not only the failure. Right failure /
+        # wrong cause is its own defect (SF-012), and it is the one a
+        # `want_fail=True` cannot see: the 2026-10-09 probe failed for a rejected
+        # `size=100` and said "unreachable", which reads as a network problem.
+        text = "\n".join(fails)
         ok = ((got_fail == want_fail) and (len(nv) == want_nv)
-              and (bool(harness) == want_harness_error))
+              and (bool(harness) == want_harness_error)
+              and (want_fail_text is None or want_fail_text in text)
+              and (forbid_fail_text is None or forbid_fail_text not in text))
         detail = ("as required" if ok else
                   "UNEXPECTED: fails=%d (want %s), not-verified=%d (want %d), "
-                  "harness errors=%d (want %s)"
+                  "harness errors=%d (want %s)%s%s"
                   % (len(fails), ">=1" if want_fail else "0", len(nv), want_nv,
-                     len(harness), want_harness_error))
+                     len(harness), want_harness_error,
+                     "" if want_fail_text is None or want_fail_text in text else
+                     "; the failure does not name %r" % want_fail_text,
+                     "" if forbid_fail_text is None or forbid_fail_text not in text
+                     else "; the failure wrongly blames %r" % forbid_fail_text))
         if not ok:
             for f in fails:
                 print("        %s" % f)
@@ -844,11 +977,11 @@ def selftest():
                                                            "11111119")})
     run_case("F3-doi-swap", "the concept DOI is used in the version slot",
              {"README.md": GOOD["README.md"].replace(
-                 "DOI **10.5281/zenodo.11111111**",
+                 "DOI **10.5281/zenodo.11111112**",
                  "DOI **10.5281/zenodo.11111110**")})
     run_case("F4-archive-label", "the archived version label drifts",
-             {"INTEGRITY.md": GOOD["INTEGRITY.md"].replace("version 9.9.8",
-                                                           "version 9.9.7")})
+             {"INTEGRITY.md": GOOD["INTEGRITY.md"].replace("version 9.9.9",
+                                                           "version 9.9.8")})
     run_case("F5-date-drift", "one of three release dates moves",
              {"CITATION.cff": GOOD["CITATION.cff"].replace("2026-01-02",
                                                            "2026-01-03")})
@@ -871,14 +1004,59 @@ def selftest():
              api=FakeAPI(records=[
                  {"doi": "10.5281/zenodo.11111113", "version": "9.9.8",
                   "published": True, "created": "2026-01-02T00:00:00Z"},
-                 {"doi": "10.5281/zenodo.11111112", "version": "9.9.9",
+                 {"doi": "10.5281/zenodo.11111114", "version": "9.9.9",
                   "published": True, "created": "2026-01-03T00:00:00Z"}]),
              expect_api_calls={"zen": 1})
     run_case("R3-version-mismatch", "the cited DOI carries another version",
              api=FakeAPI(records=[
-                 {"doi": "10.5281/zenodo.11111111", "version": "9.9.9",
+                 {"doi": "10.5281/zenodo.11111112", "version": "9.9.8",
                   "published": True, "created": "2026-01-02T00:00:00Z"}]),
              expect_api_calls={"zen": 1})
+    # The invariant the 0.1.2 release found missing. "A record carrying the release
+    # version exists" and "the repository points readers at it" are two different
+    # claims, and only the first was checked: this tree's archive line names the
+    # previous version while the release version sits published beside it under the
+    # same concept, which is the state the README was actually in on 2026-10-09.
+    run_case("R3-archive-superseded",
+             "the archive line points at a superseded record",
+             {"README.md": GOOD["README.md"].replace(
+                 "DOI **10.5281/zenodo.11111112**",
+                 "DOI **10.5281/zenodo.11111111**").replace(
+                     "version 9.9.9, 2026-01-03", "version 9.9.8, 2026-01-02"),
+              "INTEGRITY.md": GOOD["INTEGRITY.md"].replace(
+                  "DOI **10.5281/zenodo.11111112**",
+                  "DOI **10.5281/zenodo.11111111**").replace(
+                      "version 9.9.9, 2026-01-03", "version 9.9.8, 2026-01-02")},
+             api=FakeAPI(), expect_api_calls={"zen": 1},
+             want_fail_text="superseded archive")
+    # The transport itself, driven through the real implementation rather than
+    # through a stub that returns a canned tuple. Both cases are 2026-10-09
+    # findings: the probe asked the public records API for 100 records per page,
+    # which that API refuses, and then reported the refusal as unreachability.
+    # The first case pins the *reason*; the second pins the walk across pages.
+    run_case("R3-api-refused", "a rejected query is named, not called unreachable",
+             api=_TransportAPI(reject=(400, json.dumps({
+                 "status": 400, "message": "A validation error occurred.",
+                 "errors": [{"field": "size", "messages": [
+                     "Page size cannot be greater than 25. Please use "
+                     "authenticated requests to increase the limit to 100."]}]}))),
+             expect_api_calls={"zen": 1},
+             want_fail_text="refused the request (HTTP 400)",
+             forbid_fail_text="unreachable")
+    _filler = [{"id": 11110200 + i, "doi": "10.5281/zenodo.%d" % (11110200 + i),
+                "submitted": True, "created": "2025-01-01T00:00:00Z",
+                "metadata": {"version": "9.8.%d" % i}} for i in range(25)]
+    _tail = [{"id": 11111111, "doi": "10.5281/zenodo.11111111", "submitted": True,
+              "created": "2026-01-02T00:00:00Z", "metadata": {"version": "9.9.8"}},
+             {"id": 11111112, "doi": "10.5281/zenodo.11111112", "submitted": True,
+              "created": "2026-01-03T00:00:00Z", "metadata": {"version": "9.9.9"}}]
+    run_case("R3-paginated", "a concept with more versions than fit on one page",
+             api=_TransportAPI(pages=[
+                 (json.dumps({"hits": {"hits": _filler},
+                              "links": {"next":
+                                        "https://zenodo.org/api/records?page=2"}}), 200),
+                 (json.dumps({"hits": {"hits": _tail}, "links": {}}), 200)]),
+             expect_api_calls={"zen": 2}, want_fail=False)
     run_case("R4-unprotected", "main is not protected",
              api=FakeAPI(protected=False), expect_api_calls={"gh": 1})
     run_case("R5-dead-required-check", "a required check no job reports",

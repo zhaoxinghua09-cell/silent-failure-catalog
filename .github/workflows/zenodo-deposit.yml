@@ -73,6 +73,20 @@ name: Zenodo Deposit
 # archive is uploaded, and the upload's HTTP status is checked before publishing
 # -- publishing is irreversible on production.
 #
+# 🔴 A draft hides the published versions
+# --------------------------------------
+# The same API answers `GET /depositions` with the *draft alone* while a draft is
+# open under a concept, so a run that reads the listing before clearing its
+# predecessor's draft cannot see the versions it is versioning *from*. On
+# 2026-10-09 that was not a theory: one failed run left a draft behind, the next
+# run discarded it, and then reported "no published deposition under concept
+# 23051637" while the record was published and public. The old code was reading a
+# snapshot taken before the change it had just made. Drafts are therefore
+# discarded first and the listing is taken again afterwards, and the idempotency
+# check moved after that point for the same reason: with a draft open, a version
+# that is already deposited is invisible, and a check that cannot see it would
+# mint a duplicate record for it.
+#
 # Idempotency
 # -----------
 # A re-run must not mint a second record for a version that is already published.
@@ -250,23 +264,47 @@ jobs:
           if not mine:
               sys.exit("::error::no deposition found for concept %s" % concept)
 
-          # 2. Idempotency. A version already published under this concept is a
-          #    successful no-op, not a second record.
+          # 2. A leftover draft is cleared first, and the listing is taken *again*
+          #    afterwards. Both halves matter, and the second one is the easy one
+          #    to leave out: a concept with an open draft does not list its
+          #    published versions -- the deposit API answers with the draft alone.
+          #    Observed on 2026-10-09. Run 37913060210 read `latest published
+          #    deposition: 23051638`, crashed before publishing, and left draft
+          #    23259866 behind. The next run discarded that draft, then reasoned
+          #    from the listing it had taken *before* the discard and concluded
+          #    that no published deposition existed under its own concept. A
+          #    snapshot taken before a change the step itself made is not an
+          #    input. Drafts are found through the API, not tracked in a shell
+          #    variable: a variable that is empty because the step that set it
+          #    failed is a cleanup that does not run.
+          discarded = [d for d in mine if d.get("submitted") is False]
+          for d in discarded:
+              s, _ = call("POST", "%s/%s/actions/discard" % (API, d["id"]))
+              print("discarded leftover draft %s (HTTP %s)" % (d["id"], s))
+          if discarded:
+              status, rows = call("GET", API + "?size=100")
+              if status != 200:
+                  sys.exit("::error::could not re-read the deposition list after discarding "
+                           "a draft (HTTP %s): %.300s" % (status, rows))
+              if not isinstance(rows, list):
+                  sys.exit("::error::the deposition list is not JSON (HTTP %s): %.200s"
+                           % (status, rows))
+              mine = [d for d in rows if str(d.get("conceptrecid")) == concept]
+              if not mine:
+                  sys.exit("::error::no deposition found for concept %s after discarding "
+                           "a draft" % concept)
+
+          # 3. Idempotency. A version already published under this concept is a
+          #    successful no-op, not a second record -- checked here rather than
+          #    before the discard for exactly the reason above: while a draft is
+          #    open, an already-published version is invisible in the listing, so
+          #    a check placed earlier would miss it and mint a duplicate record
+          #    for a version that was already deposited.
           for d in mine:
               if d.get("submitted") and str((d.get("metadata") or {}).get("version")) == VERSION:
                   print("version %s is already published under concept %s (deposition %s) "
                         "-- nothing to do" % (VERSION, concept, d["id"]))
                   sys.exit(0)
-
-          # 3. A leftover draft blocks `newversion`, so discarding this run's
-          #    predecessors is part of the step rather than something an operator
-          #    has to remember. Drafts are found through the API, not tracked in a
-          #    shell variable: a variable that is empty because the step that set
-          #    it failed is a cleanup that does not run.
-          for d in mine:
-              if d.get("submitted") is False:
-                  s, _ = call("POST", "%s/%s/actions/discard" % (API, d["id"]))
-                  print("discarded leftover draft %s (HTTP %s)" % (d["id"], s))
 
           published = sorted(int(d["id"]) for d in mine if d.get("submitted"))
           if not published:
