@@ -28,7 +28,31 @@
 #      written copy of these steps; the block there is generated from this file
 #      and gate 15 fails if the two disagree (see the 2026-10-08 entry below).
 #
-#   2026-10-08: the CI step block is now GENERATED from this file. Before this,
+# 2026-10-09: gate 17 joins -- tools/verify_release_face.py. Gate 6 compares one
+#   sentence in README against one sentence in INTEGRITY and nothing else; it has
+#   no opinion about .zenodo.json, CITATION.cff, llms.txt or
+#   docs/where-to-find-us.md. Reading the published artifacts on 2026-10-09 found
+#   four faces of this release disagreeing with the README and no gate able to see
+#   any of them (llms.txt and where-to-find-us said 0.1.0 while the canonical tag
+#   was v0.1.1; INTEGRITY's Zenodo line said 0.1.0; Zenodo held only 0.1.0 and no
+#   Release had ever been published for v0.1.1). Gate 17 is the in-tree half: the
+#   release version, both DOIs, the archived version label and the release date
+#   must agree across every file that declares them. It never skips -- a claim
+#   that cannot be read is a failure, not a pass. The published half (tag,
+#   Release, Zenodo record, branch protection) cannot be answered at commit time
+#   and runs instead in `.github/workflows/release-face-remote.yml`, on a daily
+#   schedule and on every published release.
+# 2026-10-09: the CI form of gate 6 gains `--allow-absent-canonical-tag`. The
+#   strict form ("the declared canonical tag must resolve") is a *release-time*
+#   property, and `gates · python 3.9/3.12` are required checks on `main` -- so
+#   enforced at pull-request time it blocks the version bump that creates the tag.
+#   Measured: branch protection lists both matrix jobs as required, with
+#   `strict: true` and `enforce_admins: true`. The flag tolerates exactly one
+#   condition (a 404 on the canonical ref), prints it as "not yet released"
+#   instead of passing quietly, and leaves every other resolution error failing.
+#   The order this buys is written down in docs/pull-request-workflow.md: a
+#   version bump and its tag land together.
+# 2026-10-08: the CI step block is now GENERATED from this file. Before this,
 #   the two lists were two hand-written copies, and the shapes that defeated the
 #   comparison were measured -- a gate added to both lists, a gate's arguments
 #   changed on both sides, a gate deleted from both and the labels renumbered.
@@ -145,8 +169,10 @@ run "content manifest"            "" tools/make-manifest.py --check
 # which needs --repo <owner/repo> and GH_TOKEN. This is the one gate the two sides
 # run differently, and the difference is declared on the gate rather than in a
 # table inside the checker.
-# ci-only: tools/verify_release_consistency.py --repo-path . --repo "${{ github.repository }}"
+# ci-only: tools/verify_release_consistency.py --repo-path . --repo "${{ github.repository }}" --allow-absent-canonical-tag
 run "release consistency"         "canonical anchor resolves · manifest matches" tools/verify_release_consistency.py --repo-path . --no-remote
+
+run "release face"                "one version, told the same way on every face" tools/verify_release_face.py --repo-path . --no-remote
 
 run "examples selftest"           "T08-S5Q2 cases + mutation suite" examples/T08-S5Q2/simulation.py --selftest
 run "blinded example selftest"    "S5-Qregister blinded run + mutation suite" examples/S5-Qregister/simulation.py --selftest

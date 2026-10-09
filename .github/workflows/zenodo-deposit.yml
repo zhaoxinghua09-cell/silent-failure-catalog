@@ -1,73 +1,328 @@
 name: Zenodo Deposit
 
+# What this workflow is for
+# -------------------------
+# Mint a new *version* of this repository's Zenodo record, under the concept DOI
+# the repository already belongs to.
+#
+# Why not the Zenodo "GitHub integration"
+# ---------------------------------------
+# Zenodo's GitHub integration (enable the repository in Zenodo settings) mints a
+# versioned DOI automatically on every published Release, and it is the route
+# Zenodo recommends for a repository that is new to Zenodo. This repository is
+# not new: record 10.5281/zenodo.23051638 (version 0.1.0) and its concept DOI
+# 10.5281/zenodo.23051637 were created through the deposit API. Enabling the
+# integration now would mint a *second, unrelated* concept DOI for the same
+# repository, and the two records cannot be merged from a setting -- the
+# integration guide is explicit that the two routes must not be mixed, because
+# two separate records is what comes out. The deposit API can add a version to an
+# existing concept DOI, which is what this workflow does.
+#
+# The defect this file carried until 2026-10-09
+# --------------------------------------------
+# `0.1.0`, the archive name `sfc_v0.1.0.tar.gz`, and the entire metadata document
+# were hard-coded in this file. The release that triggers the workflow was
+# therefore invisible to it: publishing v0.1.1 would have deposited an archive
+# whose own metadata said 0.1.0 -- the version the README had already superseded
+# and forbidden as a citation target. A version string written in two places is a
+# second source of truth; here it was written in the one place that decides what
+# the archive *is*. A workflow that cannot read the tag it is depositing is a
+# gate that cannot fail.
+#
+# Where the version now comes from
+# --------------------------------
+# The tag. `workflow_dispatch` takes it as an input; a Release takes its tag
+# name. A ref that is not `vX.Y.Z` stops the run, because a deposit from a branch
+# is not a deposit of a release.
+#
+# 🔴 A trap that is NOT visible from this file
+# -------------------------------------------
+# For a `release` event GitHub Actions runs the workflow **as it exists on the
+# tag that was released**, not the copy on the default branch. The tag v0.1.1
+# carries the broken version of this file (hard-coded 0.1.0), so publishing a
+# Release for v0.1.1 would run *that* copy and deposit a record that says 0.1.0,
+# while `main` looked fixed. The rule is documented under "Triggering a
+# workflow": "Each workflow run will use the version of the workflow that is
+# present in the associated commit SHA or Git ref of the event", and for `release`
+# the associated SHA is "Last commit in the tagged release". A published tag is
+# immutable, so the fix cannot be back-filled into v0.1.1 -- a fixed release is a
+# *new* tag. That is why the deposit for a corrected release is triggered by
+# `workflow_dispatch` on `main` (which uses this file), with the tag named as an
+# input, and why the release tag is cut from a `main` that already carries this
+# file.
+#
+# Where the metadata now comes from
+# ---------------------------------
+# `.zenodo.json`, the archival metadata document the repository already ships.
+# Only `version` and `publication_date` are injected, because they are properties
+# of the *tag* rather than of the repository. `publication_date` is the tag's own
+# commit date, so it is reproducible from the repository alone and is not a wall
+# clock reading. 0.1.0 was deposited from an inline document that disagreed with
+# `.zenodo.json` on the title, the upload type and the creator affiliation; that
+# is how a record ends up archived and wrong about itself.
+#
+# The files, and why the draft is emptied first
+# ---------------------------------------------
+# `actions/newversion` returns a draft that **inherits a snapshot of the previous
+# version's files** (Zenodo deposit API docs; see also the worked example at
+# spatialworkflow.io, "the new draft inherits a snapshot of the previous
+# version's files, so uploading without clearing them publishes both sets"). A
+# deposit that uploads the new archive without deleting the inherited one
+# publishes two archives, and the version tag in the metadata would describe
+# only one of them. So the draft's files are listed and deleted before the new
+# archive is uploaded, and the upload's HTTP status is checked before publishing
+# -- publishing is irreversible on production.
+#
+# Idempotency
+# -----------
+# A re-run must not mint a second record for a version that is already published.
+# The run looks for a published deposition under the concept whose metadata says
+# the requested version and stops if it finds one. That is what makes the deposit
+# safe to trigger from a Release and to re-run by hand.
+
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to deposit, e.g. 0.1.2 (the tag v0.1.2 must exist)"
+        required: true
+        type: string
   release:
     types: [published]
+
+permissions:
+  contents: read
 
 jobs:
   deposit:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Resolve the version under deposit
+        id: v
+        env:
+          IN_VERSION: ${{ github.event.inputs.version }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -eu
+          raw="${IN_VERSION:-${RELEASE_TAG:-$REF_NAME}}"
+          ver="${raw#v}"
+          case "$ver" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::refusing to deposit: '$raw' is not a vX.Y.Z tag"; exit 1 ;;
+          esac
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the tag under deposit
         uses: actions/checkout@v4
+        with:
+          ref: refs/tags/v${{ steps.v.outputs.version }}
 
-      - name: Package source tree
-        run: git archive --format=tar.gz -o sfc_v0.1.0.tar.gz HEAD
+      - name: Build the deposition metadata from .zenodo.json
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -eu
+          PUB_DATE="$(git log -1 --format=%cs HEAD)"
+          python3 - "$VERSION" "$PUB_DATE" <<'PY'
+          import json
+          import sys
 
-      - name: Diagnose token & create deposition
+          version, published = sys.argv[1], sys.argv[2]
+          meta = json.load(open(".zenodo.json", encoding="utf-8"))
+          meta["version"] = version
+          meta["publication_date"] = published
+          with open("meta.json", "w", encoding="utf-8") as fh:
+              json.dump({"metadata": meta}, fh, ensure_ascii=False)
+          print("title            :", meta["title"])
+          print("version          :", meta["version"])
+          print("publication_date :", meta["publication_date"])
+          print("upload_type      :", meta["upload_type"])
+          print("license          :", meta["license"])
+          PY
+
+      - name: Package the tagged tree and check the version it claims
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          set -eu
+          git archive --format=tar.gz -o "sfc_v${VERSION}.tar.gz" HEAD
+          ls -l "sfc_v${VERSION}.tar.gz"
+          # The archive is *checked* for the version it claims to be, not assumed.
+          # An archive named sfc_v0.1.2.tar.gz whose contents say 0.1.1 is exactly
+          # the failure the previous version of this file shipped with.
+          python3 - "$VERSION" <<'PY'
+          import json
+          import sys
+          import tarfile
+
+          want = sys.argv[1]
+          with tarfile.open("sfc_v%s.tar.gz" % want) as tf:
+              member = next(n for n in tf.getnames() if n.endswith(".zenodo.json"))
+              got = json.load(tf.extractfile(member))["version"]
+          if got != want:
+              raise SystemExit(
+                  "::error::archive .zenodo.json says %s but the tag says %s" % (got, want))
+          print("archive carries .zenodo.json version", got)
+          PY
+
+      - name: Deposit a new version under the existing concept DOI
         env:
           ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
-          echo "=== Step 1: token validity (GET /api/deposit/depositions) ==="
-          GET_RESP=$(curl -sS -w "\n__HTTP_%{http_code}__" -H "Authorization: Bearer $ZENODO_TOKEN" "https://zenodo.org/api/deposit/depositions?size=1")
-          GET_CODE=$(echo "$GET_RESP" | grep -o '__HTTP_[0-9]*__' | grep -o '[0-9]*')
-          echo "GET HTTP status: $GET_CODE"
-          echo "GET body (first 400 chars):"
-          echo "$GET_RESP" | sed 's/__HTTP_[0-9]*__//' | head -c 400
-          echo
-          if [ "$GET_CODE" != "200" ]; then
-            echo "::error::Token invalid or Zenodo unreachable (HTTP $GET_CODE). Stop."
-            exit 1
-          fi
+          set -eu
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
 
-          echo "=== Step 2: create deposition (POST) ==="
-          cat > meta.json <<'EOF'
-          {"metadata":{"title":"Silent Failure Catalog","upload_type":"software","creators":[{"name":"Zhao, Xinghua","orcid":"0009-0001-0512-1237","affiliation":"MedXpert (unregistered name)"}],"description":"A curated catalogue of silent-failure cases and negative controls for AI-agent evaluation. A negative control is a standard experimental-design technique where the right answer is known in advance, so a panel that agrees on a wrong answer is caught rather than scored as consensus. Targets shared systematic error across evaluators. Code under MIT; catalogue content all rights reserved.","access_right":"open","license":"other-open","license_condition":"Code: MIT license. Catalogue content (failure-mode descriptions, taxonomy, index): all rights reserved; reuse requires written permission. See LICENSE and LICENSE-CONTENT in repository.","version":"0.1.0","publication_date":"2026-09-30","keywords":["silent failure","AI evaluation","negative control","agent identity","shared systematic error"],"related_identifiers":[{"identifier":"https://github.com/zhaoxinghua09-cell/silent-failure-catalog","relation":"isSupplementTo","resource_type":"software"}]}}
-          EOF
-          POST_RESP=$(curl -sS -w "\n__HTTP_%{http_code}__" -H "Authorization: Bearer $ZENODO_TOKEN" -H "Content-Type: application/json" -X POST --data @meta.json "https://zenodo.org/api/deposit/depositions")
-          POST_CODE=$(echo "$POST_RESP" | grep -o '__HTTP_[0-9]*__' | grep -o '[0-9]*')
-          POST_BODY=$(echo "$POST_RESP" | sed 's/__HTTP_[0-9]*__//')
-          echo "POST HTTP status: $POST_CODE"
-          echo "POST body:"
-          echo "$POST_BODY" | head -c 2000
-          echo
-          if [ "$POST_CODE" != "201" ]; then
-            echo "::error::Deposition creation failed (HTTP $POST_CODE). See body above."
-            exit 1
-          fi
-          DEP_ID=$(echo "$POST_BODY" | jq -r '.id')
-          BUCKET=$(echo "$POST_BODY" | jq -r '.links.bucket')
-          echo "Deposition id: $DEP_ID  bucket: $BUCKET"
+          TOKEN = os.environ["ZENODO_TOKEN"]
+          VERSION = os.environ["VERSION"]
+          API = "https://zenodo.org/api/deposit/depositions"
+          ARCHIVE = "sfc_v%s.tar.gz" % VERSION
 
-          echo "=== Step 3: upload file ==="
-          UP_RESP=$(curl -sS -w "\n__HTTP_%{http_code}__" -H "Authorization: Bearer $ZENODO_TOKEN" -H "Content-Type: application/octet-stream" -X PUT --data-binary @sfc_v0.1.0.tar.gz "$BUCKET/sfc_v0.1.0.tar.gz")
-          echo "UPLOAD HTTP status: $(echo "$UP_RESP" | grep -o '__HTTP_[0-9]*__' | grep -o '[0-9]*')"
+          def call(method, url, payload=None, raw=False, ctype="application/json"):
+              """Return (status, body). Never raise on an HTTP error -- a status
+              that is read is a status a caller can act on."""
+              headers = {"Authorization": "Bearer " + TOKEN}
+              data = None
+              if payload is not None:
+                  headers["Content-Type"] = ctype
+                  data = payload if raw else json.dumps(payload).encode("utf-8")
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              try:
+                  with urllib.request.urlopen(req, timeout=180) as resp:
+                      text = resp.read()
+                      return resp.status, (text if raw else json.loads(text))
+              except urllib.error.HTTPError as e:
+                  body = e.read().decode("utf-8", "replace")
+                  return e.code, body
+              except urllib.error.URLError as e:
+                  sys.exit("::error::Zenodo unreachable: %s" % e)
 
-          echo "=== Step 4: publish ==="
-          PUB_RESP=$(curl -sS -w "\n__HTTP_%{http_code}__" -H "Authorization: Bearer $ZENODO_TOKEN" -X POST "https://zenodo.org/api/deposit/depositions/$DEP_ID/actions/publish")
-          PUB_CODE=$(echo "$PUB_RESP" | grep -o '__HTTP_[0-9]*__' | grep -o '[0-9]*')
-          PUB_BODY=$(echo "$PUB_RESP" | sed 's/__HTTP_[0-9]*__//')
-          echo "PUB HTTP status: $PUB_CODE"
-          echo "$PUB_BODY" | head -c 2000
-          echo
-          if [ "$PUB_CODE" = "202" ]; then
-            echo "DOI=$(echo "$PUB_BODY" | jq -r '.doi')"
-            echo "CONCEPTDOI=$(echo "$PUB_BODY" | jq -r '.conceptdoi')"
-          else
-            echo "::error::Publish failed (HTTP $PUB_CODE)"
-            exit 1
-          fi
+          # 1. The token must work and the concept DOI must be unambiguous. The
+          #    concept is read from .zenodo.json rather than hard-coded, and there
+          #    must be exactly one `isPartOf` Zenodo relation: if a second one is
+          #    ever added, silently picking the first would deposit against the
+          #    wrong concept, so this refuses instead.
+          status, rows = call("GET", API + "?size=100")
+          if status != 200:
+              sys.exit("::error::ZENODO_TOKEN rejected or Zenodo unreachable (HTTP %s): %.300s"
+                       % (status, rows))
+          concepts = [r["identifier"].rstrip("/").rsplit(".", 1)[-1]
+                      for r in json.load(open(".zenodo.json", encoding="utf-8")).get(
+                          "related_identifiers", [])
+                      if r.get("relation") == "isPartOf" and "zenodo." in r.get("identifier", "")]
+          if len(concepts) != 1:
+              sys.exit("::error::expected exactly one isPartOf Zenodo concept DOI in "
+                       ".zenodo.json, found %d" % len(concepts))
+          concept = concepts[0]
+          print("concept DOI id:", concept)
 
-          echo "=== Step 5: cleanup orphan draft 23051590 (failed run 36670131545) ==="
-          curl -sS -o /dev/null -w "DISCARD HTTP %{http_code}\n" -H "Authorization: Bearer $ZENODO_TOKEN" -X POST "https://zenodo.org/api/deposit/depositions/23051590/actions/discard" || true
+          mine = [d for d in rows if str(d.get("conceptrecid")) == concept]
+          if not mine:
+              sys.exit("::error::no deposition found for concept %s" % concept)
+
+          # 2. Idempotency. A version already published under this concept is a
+          #    successful no-op, not a second record.
+          for d in mine:
+              if d.get("submitted") and str((d.get("metadata") or {}).get("version")) == VERSION:
+                  print("version %s is already published under concept %s (deposition %s) "
+                        "-- nothing to do" % (VERSION, concept, d["id"]))
+                  sys.exit(0)
+
+          # 3. A leftover draft blocks `newversion`, so discarding this run's
+          #    predecessors is part of the step rather than something an operator
+          #    has to remember. Drafts are found through the API, not tracked in a
+          #    shell variable: a variable that is empty because the step that set
+          #    it failed is a cleanup that does not run.
+          for d in mine:
+              if d.get("submitted") is False:
+                  s, _ = call("POST", "%s/%s/actions/discard" % (API, d["id"]))
+                  print("discarded leftover draft %s (HTTP %s)" % (d["id"], s))
+
+          published = sorted(int(d["id"]) for d in mine if d.get("submitted"))
+          if not published:
+              sys.exit("::error::no published deposition under concept %s to version from" % concept)
+          latest = published[-1]
+          print("latest published deposition:", latest)
+
+          # 4. `newversion` takes the id of the latest *version*, not the concept
+          #    id (Zenodo refuses the concept id here).
+          status, new = call("POST", "%s/%s/actions/newversion" % (API, latest))
+          if status != 201:
+              sys.exit("::error::newversion failed (HTTP %s): %.300s" % (status, new))
+
+          # 5. The draft id is read from the API rather than parsed out of the POST
+          #    body, so the two documented spellings of the response cannot turn
+          #    the id into an empty string.
+          draft_url = (new.get("links") or {}).get("latest_draft", "")
+          if not draft_url:
+              sys.exit("::error::no links.latest_draft in the newversion response")
+          status, draft = call("GET", draft_url)
+          if status != 200:
+              sys.exit("::error::could not read the new draft (HTTP %s): %.300s" % (status, draft))
+          draft_id = draft["id"]
+          bucket = (draft.get("links") or {}).get("bucket", "")
+          if not bucket:
+              sys.exit("::error::the new draft has no upload bucket")
+          print("draft deposition:", draft_id)
+
+          # 6. The draft inherits a snapshot of the previous version's files.
+          #    Uploading without clearing them publishes both sets, so the inherited
+          #    files are deleted first, and the deletion is checked.
+          files = draft.get("files")
+          if files is None:
+              status, files = call("GET", draft["links"]["files"])
+              if status != 200:
+                  sys.exit("::error::could not list the draft's files (HTTP %s): %.300s"
+                           % (status, files))
+          for f in files:
+              s, _ = call("DELETE", f["links"]["self"])
+              if s not in (204, 200):
+                  sys.exit("::error::could not delete inherited file %s (HTTP %s)"
+                           % (f.get("filename"), s))
+              print("removed inherited file:", f.get("filename"))
+
+          # 7. Upload the archive to the bucket, checking the status before
+          #    publishing -- publishing is irreversible.
+          with open(ARCHIVE, "rb") as fh:
+              blob = fh.read()
+          status, up = call("PUT", "%s/%s" % (bucket, ARCHIVE), payload=blob, raw=True,
+                            ctype="application/octet-stream")
+          if status not in (200, 201):
+              sys.exit("::error::upload of %s failed (HTTP %s): %.300s"
+                       % (ARCHIVE, status, up))
+          print("uploaded %s (%d bytes, HTTP %s)" % (ARCHIVE, len(blob), status))
+
+          # 8. Metadata, then publish. A PUT must carry the *full* metadata object.
+          meta = json.load(open("meta.json", encoding="utf-8"))
+          status, _ = call("PUT", "%s/%s" % (API, draft_id), payload=meta)
+          if status != 200:
+              sys.exit("::error::setting metadata failed (HTTP %s)" % status)
+          print("metadata set")
+
+          status, pub = call("POST", "%s/%s/actions/publish" % (API, draft_id))
+          if status != 202:
+              sys.exit("::error::publish failed (HTTP %s): %.300s" % (status, pub))
+
+          # 9. The published record must identify itself as the tag that triggered
+          #    the run, and must carry the archive. This is the assertion the whole
+          #    step exists for.
+          got = (pub.get("metadata") or {}).get("version")
+          print("record doi     :", pub.get("doi"))
+          print("concept doi    :", pub.get("conceptdoi"))
+          print("record version :", got)
+          print("record files   :", [f.get("filename") for f in (pub.get("files") or [])])
+          if got != VERSION:
+              sys.exit("::error::published record says version %r, the tag says %r"
+                       % (got, VERSION))
+          names = [f.get("filename") for f in (pub.get("files") or [])]
+          if names != [ARCHIVE]:
+              sys.exit("::error::published record carries %r, expected exactly %r"
+                       % (names, [ARCHIVE]))
+          print("OK -- the record identifies itself as %s and carries %s" % (VERSION, ARCHIVE))
+          PY
