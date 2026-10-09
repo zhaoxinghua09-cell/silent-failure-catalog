@@ -184,9 +184,31 @@ jobs:
           API = "https://zenodo.org/api/deposit/depositions"
           ARCHIVE = "sfc_v%s.tar.gz" % VERSION
 
+          def body_of(raw_bytes, binary):
+              """Decode a response body without assuming anything about it.
+
+              A 204 from DELETE carries no body at all, and a gateway error can
+              arrive as HTML with a 200. `json.loads("")` raises, and a raise
+              here is a traceback in a release job instead of a sentence. That
+              is not hypothetical: v0.1.2 died at this exact line, after the
+              token check had already passed and the concept DOI was known.
+              """
+              if binary:
+                  return raw_bytes
+              text = (raw_bytes.decode("utf-8", "replace")
+                      if isinstance(raw_bytes, (bytes, bytearray))
+                      else str(raw_bytes))
+              if not text.strip():
+                  return None
+              try:
+                  return json.loads(text)
+              except ValueError:
+                  return text
+
           def call(method, url, payload=None, raw=False, ctype="application/json"):
               """Return (status, body). Never raise on an HTTP error -- a status
-              that is read is a status a caller can act on."""
+              that is read is a status a caller can act on -- and never raise on
+              a body that is not JSON either."""
               headers = {"Authorization": "Bearer " + TOKEN}
               data = None
               if payload is not None:
@@ -195,8 +217,7 @@ jobs:
               req = urllib.request.Request(url, data=data, headers=headers, method=method)
               try:
                   with urllib.request.urlopen(req, timeout=180) as resp:
-                      text = resp.read()
-                      return resp.status, (text if raw else json.loads(text))
+                      return resp.status, body_of(resp.read(), raw)
               except urllib.error.HTTPError as e:
                   body = e.read().decode("utf-8", "replace")
                   return e.code, body
@@ -211,6 +232,9 @@ jobs:
           status, rows = call("GET", API + "?size=100")
           if status != 200:
               sys.exit("::error::ZENODO_TOKEN rejected or Zenodo unreachable (HTTP %s): %.300s"
+                       % (status, rows))
+          if not isinstance(rows, list):
+              sys.exit("::error::the deposition list is not JSON (HTTP %s): %.200s"
                        % (status, rows))
           concepts = [r["identifier"].rstrip("/").rsplit(".", 1)[-1]
                       for r in json.load(open(".zenodo.json", encoding="utf-8")).get(
@@ -259,12 +283,15 @@ jobs:
           # 5. The draft id is read from the API rather than parsed out of the POST
           #    body, so the two documented spellings of the response cannot turn
           #    the id into an empty string.
-          draft_url = (new.get("links") or {}).get("latest_draft", "")
+          draft_url = ((new or {}).get("links") or {}).get("latest_draft", "")
           if not draft_url:
               sys.exit("::error::no links.latest_draft in the newversion response")
           status, draft = call("GET", draft_url)
           if status != 200:
               sys.exit("::error::could not read the new draft (HTTP %s): %.300s" % (status, draft))
+          if not isinstance(draft, dict):
+              sys.exit("::error::the new draft is not JSON (HTTP %s): %.200s"
+                       % (status, draft))
           draft_id = draft["id"]
           bucket = (draft.get("links") or {}).get("bucket", "")
           if not bucket:
@@ -308,6 +335,9 @@ jobs:
           status, pub = call("POST", "%s/%s/actions/publish" % (API, draft_id))
           if status != 202:
               sys.exit("::error::publish failed (HTTP %s): %.300s" % (status, pub))
+          if not isinstance(pub, dict):
+              sys.exit("::error::publish returned a non-JSON body (HTTP %s): %.200s"
+                       % (status, pub))
 
           # 9. The published record must identify itself as the tag that triggered
           #    the run, and must carry the archive. This is the assertion the whole
