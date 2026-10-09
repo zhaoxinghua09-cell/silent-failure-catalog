@@ -51,6 +51,21 @@ Gates 9 and 10, three new hard rules, and the closure of an external review roun
 
 ### Fixed
 
+- **A 200 the gate could not read was reported as a concept with nothing under it** (D-032),
+  found by the scheduled `release-face-remote.yml` run and confirmed by an outside-in pass that
+  resolved the concept DOI against the records API instead of trusting the gate's sentence.
+  `zenodo_records()` read the search envelope as
+  `((data or {}).get("hits") or {}).get("hits") or []`, so "the envelope is absent" and "the
+  concept is empty" arrived at the caller as the same value, and the caller had a sentence ready
+  for the second: `R3 FAIL  no record under the concept`. This is the second escape of the class
+  D-029 closed the same day — D-029 fixed the shapes it had been shown (an HTTP refusal, a body
+  that is not JSON), and neither of the cases it added fed a 200 whose body *parses* but is not
+  the envelope. The probe now requires `hits` to be an object carrying `total`, and otherwise
+  refuses with the top-level keys it did receive. `R3-envelope-shape` pins the negative control
+  (the failure must name the shape and must not claim an empty concept) and `R3-genuinely-empty`
+  pins the counterpart (a well-formed empty envelope is still an empty concept), so the check
+  cannot pass by never calling a concept empty. The `R3-paginated` fixture now carries `total`,
+  because the fixture was the thing that omitted it. `--selftest` goes from 28 cases to 30.
 - `gate-lint.py` crashed with `KeyError: 'PARSE'` on an unparseable file (the `PARSE` finding
   was emitted but never registered in `RULES`). Covered by a new selftest case.
 - `defect-closure.py` no longer fails open when the hook cannot be read.
