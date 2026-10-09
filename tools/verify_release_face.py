@@ -226,7 +226,23 @@ def one_match(pattern, text, what, fname, fails):
 
 
 def zenodo_id(doi):
-    return doi.rstrip("/").split("/")[-1]
+    """The numeric id Zenodo indexes: `23051637` out of `10.5281/zenodo.23051637`.
+
+    The last path segment of a Zenodo DOI is `zenodo.<id>`, not `<id>` -- so
+    `doi.rstrip("/").split("/")[-1]` returns `zenodo.23051637`, and for years the
+    gate asked `conceptrecid:zenodo.23051637` and
+    `/api/records/zenodo.23051637`. Both are well-formed questions about an id that
+    does not exist: the search answers a valid envelope with `hits.total = 0`
+    (D-034's "Zenodo holds no record at all"), and the read answers
+    `404 The persistent identifier does not exist.` -- which is a true answer to a
+    wrong question. The defect survived three fixes because every one of them
+    examined the *answer*; none of them ever looked at the *question*. Found on
+    2026-10-10 only because D-034 started printing the URL it had asked.
+    """
+    tail = doi.rstrip("/").split("/")[-1]
+    if "." in tail:
+        tail = tail.rsplit(".", 1)[-1]
+    return tail
 
 
 # --------------------------------------------------------------------------- #
@@ -1075,6 +1091,7 @@ class _TransportAPI(RealAPI):
         # refuse) and `pages` (always answer) cannot express between them.
         self.outcomes = list(outcomes or [])
         self.sleeps = []
+        self.urls = []
         self.calls = {"zen": 0}
         # Inheriting RealAPI also inherits its `gh` half, which shells out to the
         # real GitHub. These cases are about the Zenodo transport, so that half is
@@ -1100,6 +1117,12 @@ class _TransportAPI(RealAPI):
 
     def _open(self, req, timeout=90):
         self.calls["zen"] += 1
+        # The URL is recorded, because a case has to be able to pin the *question*
+        # and not only the answer. For years this gate asked
+        # `conceptrecid:zenodo.23051637` and every one of its 36 cases passed: the
+        # fake transport answers whatever it is handed, so a well-formed question
+        # about a nonexistent id was indistinguishable from the right one.
+        self.urls.append(getattr(req, "full_url", "") or "")
         if self.outcomes:
             step = self.outcomes.pop(0)
             if step[0] == "reject":
@@ -1137,9 +1160,10 @@ def selftest():
     def run_case(cid, what, override=None, drop=None, api=None, zenodo=True,
                  want_fail=True, expect_api_calls=None, want_nv=0,
                  want_harness_error=False, want_fail_text=None,
-                 forbid_fail_text=None):
+                 forbid_fail_text=None, want_urls=None):
         root = tempfile.mkdtemp(prefix="face-%s-" % cid)
         harness = []
+        a = None
         try:
             _build(root, override, drop)
             fails, nv = [], []
@@ -1179,19 +1203,39 @@ def selftest():
         # `want_fail=True` cannot see: the 2026-10-09 probe failed for a rejected
         # `size=100` and said "unreachable", which reads as a network problem.
         text = "\n".join(fails)
+        # A case may also pin the *question*, not only the answer. Every gate here
+        # asks something over the network, and a fake transport answers whatever it
+        # is handed -- so 36 cases passed while the gate asked
+        # `conceptrecid:zenodo.23051637`. Pinning the URL is the only way a case can
+        # see the difference between a well-formed question about the wrong id and
+        # the right one.
+        url_ok, url_detail = True, ""
+        if want_urls is not None:
+            asked = getattr(a, "urls", None)
+            if asked is None:
+                url_ok, url_detail = False, "the API records no URLs to check"
+            else:
+                missing = [w for w in want_urls
+                           if not any(w in u for u in asked)]
+                if missing:
+                    url_ok = False
+                    url_detail = ("no request asked for %s (asked: %s)"
+                                  % (", ".join(missing), " | ".join(asked)))
         ok = ((got_fail == want_fail) and (len(nv) == want_nv)
               and (bool(harness) == want_harness_error)
               and (want_fail_text is None or _all_in(want_fail_text, text))
-              and (forbid_fail_text is None or forbid_fail_text not in text))
+              and (forbid_fail_text is None or forbid_fail_text not in text)
+              and url_ok)
         detail = ("as required" if ok else
                   "UNEXPECTED: fails=%d (want %s), not-verified=%d (want %d), "
-                  "harness errors=%d (want %s)%s%s"
+                  "harness errors=%d (want %s)%s%s%s"
                   % (len(fails), ">=1" if want_fail else "0", len(nv), want_nv,
                      len(harness), want_harness_error,
                      "" if want_fail_text is None or want_fail_text in text else
                      "; the failure does not name %r" % want_fail_text,
                      "" if forbid_fail_text is None or forbid_fail_text not in text
-                     else "; the failure wrongly blames %r" % forbid_fail_text))
+                     else "; the failure wrongly blames %r" % forbid_fail_text,
+                     url_detail))
         if not ok:
             for f in fails:
                 print("        %s" % f)
@@ -1321,6 +1365,26 @@ def selftest():
                  ("page", _none_found, 200)]),
              expect_api_calls={"zen": 3}, want_fail=False,
              forbid_fail_text="no record under the concept")
+    # The question, not the answer. `10.5281/zenodo.23051637` does not end in
+    # `23051637` -- it ends in `zenodo.23051637` -- so `zenodo_id()` returned the
+    # whole segment and the gate spent its life asking `conceptrecid:zenodo.23051637`
+    # and `/api/records/zenodo.23051637`: two well-formed questions about an id that
+    # does not exist. Zenodo answered both truthfully (an envelope with
+    # `hits.total = 0`; a 404), and every one of the 36 cases passed, because a fake
+    # transport answers whatever it is handed. Three fixes examined the answer before
+    # one of them printed the URL it had asked. This case pins the URL so the question
+    # can never be wrong again without a case going red.
+    run_case("R3-asks-the-right-id",
+             "a Zenodo DOI is turned into the numeric id Zenodo indexes, not the "
+             "whole last segment (`zenodo.<id>`)",
+             api=_TransportAPI(outcomes=[
+                 ("page", _record_obj(11111112, "10.5281/zenodo.11111112",
+                                      "9.9.9"), 200),
+                 ("page", _family, 200),
+                 ("page", _family, 200)]),
+             expect_api_calls={"zen": 3}, want_fail=False,
+             want_urls=["/api/records/11111110",
+                        "conceptrecid:11111110"]),
     # The counterpart with teeth. When Zenodo itself says the identifier does not
     # exist, the read *is* the evidence, and R3 must still be able to say no -- a
     # fix that made "empty" unreachable would have removed the gate's ability to

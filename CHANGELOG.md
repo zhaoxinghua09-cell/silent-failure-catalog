@@ -51,6 +51,18 @@ Gates 9 and 10, three new hard rules, and the closure of an external review roun
 
 ### Fixed
 
+- **The gate asked the wrong question for its whole life, and every answer was honest** (D-035),
+  found by the re-triggered run after D-034 (run 37999643837) printing the URL it had asked:
+  `/api/records/zenodo.23051637` — a well-formed question about an id that does not exist, because
+  `zenodo_id()` returned the whole last DOI segment (`zenodo.23051637`) instead of the numeric id
+  (`23051637`). The search answered a valid envelope with `hits.total = 0`; the read answered a
+  real `404 The persistent identifier does not exist.` — both true answers to a wrong question,
+  and the reason three consecutive fixes (answer shape, transport, choice of door) never touched
+  it is that all three examined the answer and none looked at the question. `zenodo_id()` now
+  extracts the numeric id; the self-test harness records every URL it is asked; and the new case
+  `R3-asks-the-right-id` pins the gate to the question itself, so the class dies at the question,
+  not at the answer. L6-proven: on the pre-fix function that case is the only one of 37 that
+  fails.
 - **A search index's silence was published as a statement about what Zenodo holds** (D-034),
   found by the convergence re-run of the two fixes above (run 37966943415, which already ran
   them: `headSha` 56b09261). R3 decided what a concept *contains* by asking a **search**
