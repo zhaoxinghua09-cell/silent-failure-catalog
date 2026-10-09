@@ -457,6 +457,20 @@
       "evidence": "On the unmodified file the new case produced `R3: Zenodo holds no record at all under concept 10.5281/zenodo.11111110` -- a definite finding manufactured from an unreadable page, reproducing the remote run. With the change, the same input yields `Zenodo answered HTTP 200 but not with a records envelope (top-level keys: message, status)`, the fabricated sentence is absent (`forbid_fail_text`), and the suite is 30/30 where it was 28/28 before. The in-tree scope (`--no-remote`) still prints `verdict: PASS -- every face tells the same story`, and `tools/make-manifest.py --check` reported `modified: tools/verify_release_face.py` before regeneration, so the content manifest is a gate that fires rather than a decoration.",
       "siblings_scanned": true,
       "closed": true
+    },
+    {
+      "id": "D-033",
+      "date": "2026-10-10",
+      "source": "external-review",
+      "symptom": "The scheduled run after D-032 was fixed reported `R3 Zenodo record FAIL Zenodo refused the request (HTTP 504): <html>504 Gateway Time-out</html>` and `verdict: FAIL -- 1 finding(s)`. The cause named was now true -- that was the point of D-032 -- but the consequence was still wrong: a momentary gateway timeout was published in the same channel as repository drift, so a daily gate goes red for an event that says nothing about this repository, and the reader is asked to investigate a deposit that is fine.",
+      "class": "SF-012",
+      "escape_cause": "E2",
+      "found_by": "the scheduled release-face-remote.yml run 37965255375, triggered as the re-verification of the D-032 fix, read against the question 'is this red about us or about them?'",
+      "root_cause": "`zenodo_records()` treated every transport answer as final. For a 4xx that is correct -- a rejection is the answer. For a 5xx it is not: 429/500/502/503/504 say 'ask again', and asking once converted an upstream hiccup into a repository finding. The retry is the standard remedy and its absence was the defect: without it, 'cannot verify right now' and 'verified false' leave this function as the same tuple, which is the same conflation D-032 fixed one layer down.",
+      "gate_added": "`tools/verify_release_face.py` retries the retryable statuses (429/500/502/503/504) up to `ZENODO_ATTEMPTS = 3` with linear backoff via `_sleep()` (split out so a case drives the timing without waiting), and still returns a finding when the attempts run out -- now carrying `after N attempts` so a flake is distinguishable from a wall. Two cases: `R3-retry-recovers` (a 504 then a good page must be decided by the second answer, not the first) and `R3-retry-exhausted` (three 504s must still fail, and the finding must name the attempt count). Both were added and run *before* the retry existed: `selftest FAILED: 2 of 32` with `fails=1 (want 0)` and `the failure does not name 'refused the request (HTTP 504) after 3 attempts'`.",
+      "evidence": "Before: `selftest FAILED: 2 of 32 case(s)` and both new case ids printed as `x`. After: `selftest PASSED: 32 cases`, exit 0, and the two productions paths are pinned -- `R3-api-refused` still expects exactly one call for a 400 (a refusal is not retried) while `R3-retry-exhausted` expects three for a 504 block. The real run that motivated it: https://github.com/zhaoxinghua09-cell/silent-failure-catalog/actions/runs/37965255375",
+      "siblings_scanned": true,
+      "closed": true
     }
   ]
 }

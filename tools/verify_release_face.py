@@ -99,6 +99,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 
@@ -145,6 +146,17 @@ ZENODO_API = "https://zenodo.org/api/records"
 # more versions than fit in one page is walked rather than assumed small. 20 pages
 # is 500 versions; a software catalogue that reaches that is not this one.
 ZENODO_PAGE_LIMIT = 20
+# A gateway timeout is evidence about the gateway, not about the concept. On
+# 2026-10-10 the scheduled run failed with `R3 ... Zenodo refused the request
+# (HTTP 504)` -- a true cause, correctly named, arriving from an upstream that was
+# momentarily unreachable. Reported as a finding it is indistinguishable from
+# repository drift, and a daily gate that goes red because someone else's
+# gateway hiccuped is a gate people learn to ignore. The remedy is the ordinary
+# one for a transient transport: retry the *retryable* statuses, bounded, and
+# still fail when the retries run out -- so the gate keeps its ability to say no.
+ZENODO_ATTEMPTS = 3
+ZENODO_RETRY_STATUS = (429, 500, 502, 503, 504)
+_RETRY_SLEEP = time.sleep
 WORKFLOW_DIR = os.path.join(".github", "workflows")
 
 
@@ -454,6 +466,10 @@ class RealAPI(object):
         """
         return urllib.request.urlopen(req, timeout=timeout)
 
+    def _sleep(self, seconds):
+        """Split out like `_open`, so a case can drive retry timing without waiting."""
+        _RETRY_SLEEP(seconds)
+
     def zenodo_records(self, concept_doi):
         # Unauthenticated callers are capped at 25 records per page. Asking for
         # 100 is not a larger request, it is a rejected one: on 2026-10-09 this
@@ -473,18 +489,38 @@ class RealAPI(object):
         for _ in range(ZENODO_PAGE_LIMIT):
             req = urllib.request.Request(url, headers={
                 "Accept": "application/json", "User-Agent": "verify_release_face"})
-            try:
-                with self._open(req) as resp:
-                    body = resp.read().decode("utf-8", "replace")
-            except urllib.error.HTTPError as e:
+            # A gateway timeout is a statement about the gateway. Retrying it is the
+            # ordinary remedy, and the retry is bounded so it can never become an
+            # exemption: when the attempts run out the finding stands and says how
+            # many were made. Only statuses that mean "try again later" are retried;
+            # a 4xx is the answer, not a hiccup, and is reported on the first reply.
+            body = None
+            for attempt in range(1, ZENODO_ATTEMPTS + 1):
                 try:
-                    detail = e.read().decode("utf-8", "replace").strip()[:300]
-                except Exception:                        # noqa: BLE001
-                    detail = ""
-                return (None, "Zenodo refused the request (HTTP %s): %s"
-                              % (e.code, detail or "(no body)"))
-            except Exception as e:  # noqa: BLE001 - any other transport failure is the message
-                return (None, "Zenodo API unreachable from here (%s)" % e)
+                    with self._open(req) as resp:
+                        body = resp.read().decode("utf-8", "replace")
+                    break
+                except urllib.error.HTTPError as e:
+                    try:
+                        detail = e.read().decode("utf-8", "replace").strip()[:300]
+                    except Exception:                    # noqa: BLE001
+                        detail = ""
+                    if (e.code in ZENODO_RETRY_STATUS
+                            and attempt < ZENODO_ATTEMPTS):
+                        self._sleep(attempt)             # 1s, 2s -- bounded, no jitter
+                        continue
+                    after = ("" if attempt == 1
+                             else " after %d attempts" % attempt)
+                    return (None, "Zenodo refused the request (HTTP %s)%s: %s"
+                                  % (e.code, after, detail or "(no body)"))
+                except Exception as e:  # noqa: BLE001 - other transport failure is the message
+                    if attempt < ZENODO_ATTEMPTS:
+                        self._sleep(attempt)
+                        continue
+                    return (None, "Zenodo API unreachable from here (%s)" % e)
+            if body is None:
+                return (None, "Zenodo gave no answer after %d attempts"
+                              % ZENODO_ATTEMPTS)
             try:
                 data = json.loads(body)
             except ValueError as e:
@@ -870,10 +906,15 @@ class _TransportAPI(RealAPI):
     defect of 2026-10-09 stayed invisible to 25 passing cases.
     """
 
-    def __init__(self, pages=None, reject=None, repo="owner/name"):
+    def __init__(self, pages=None, reject=None, outcomes=None, repo="owner/name"):
         super(_TransportAPI, self).__init__(repo)
         self.pages = list(pages or [])
         self.reject = reject
+        # An ordered script of answers, each either a refusal or a page, so a case
+        # can say "the gateway timed out, then it answered" -- which `reject` (always
+        # refuse) and `pages` (always answer) cannot express between them.
+        self.outcomes = list(outcomes or [])
+        self.sleeps = []
         self.calls = {"zen": 0}
         # Inheriting RealAPI also inherits its `gh` half, which shells out to the
         # real GitHub. These cases are about the Zenodo transport, so that half is
@@ -893,8 +934,20 @@ class _TransportAPI(RealAPI):
     def required_checks(self):
         return self._gh_stub.required_checks()
 
+    def _sleep(self, seconds):
+        # Retry timing is the code under test, not something a case should wait on.
+        self.sleeps.append(seconds)
+
     def _open(self, req, timeout=90):
         self.calls["zen"] += 1
+        if self.outcomes:
+            step = self.outcomes.pop(0)
+            if step[0] == "reject":
+                _, code, body = step
+                raise urllib.error.HTTPError(req.full_url, code, "refused", {},
+                                             io.BytesIO(body.encode("utf-8")))
+            _, body, status = step
+            return _FakeResp(body, status)
         if self.reject is not None:
             code, body = self.reject
             raise urllib.error.HTTPError(req.full_url, code, "refused", {},
@@ -1085,6 +1138,28 @@ def selftest():
                  "hits": {"total": 0, "hits": []}, "links": {}}), 200)]),
              expect_api_calls={"zen": 1},
              want_fail_text="no record at all under concept")
+    # A transient upstream must not be reported as repository drift. The first case
+    # feeds a 504 and then a good page: before the retry existed, the first 504 was
+    # the verdict. The second feeds a gateway that never recovers: the retry must
+    # not become an exemption, and the finding has to say what it took.
+    run_case("R3-retry-recovers", "a gateway timeout is retried rather than reported "
+             "(the first answer was about the gateway, the second about the concept)",
+             api=_TransportAPI(outcomes=[
+                 ("reject", 504, "<html>504 Gateway Time-out</html>"),
+                 ("page", json.dumps({"hits": {"total": 2, "hits": [
+                     {"doi": "10.5281/zenodo.11111111", "submitted": True,
+                      "created": "2026-01-02T00:00:00Z",
+                      "metadata": {"version": "9.9.8"}},
+                     {"doi": "10.5281/zenodo.11111112", "submitted": True,
+                      "created": "2026-01-03T00:00:00Z",
+                      "metadata": {"version": "9.9.9"}}]}, "links": {}}), 200)]),
+             expect_api_calls={"zen": 2}, want_fail=False)
+    run_case("R3-retry-exhausted", "a gateway that never recovers still fails, and the "
+             "finding states how many attempts were made",
+             api=_TransportAPI(outcomes=[
+                 ("reject", 504, "<html>504 Gateway Time-out</html>")] * 3),
+             expect_api_calls={"zen": 3},
+             want_fail_text="refused the request (HTTP 504) after 3 attempts")
     _filler = [{"id": 11110200 + i, "doi": "10.5281/zenodo.%d" % (11110200 + i),
                 "submitted": True, "created": "2025-01-01T00:00:00Z",
                 "metadata": {"version": "9.8.%d" % i}} for i in range(25)]

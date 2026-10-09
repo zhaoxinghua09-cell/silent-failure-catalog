@@ -51,6 +51,21 @@ Gates 9 and 10, three new hard rules, and the closure of an external review roun
 
 ### Fixed
 
+- **A gateway timeout was published as repository drift** (D-033), found by the scheduled run
+  that re-verified the fix above. That run reported `R3 Zenodo record FAIL — Zenodo refused the
+  request (HTTP 504)` — a true cause, correctly named, which was the point of the previous fix.
+  The consequence was still wrong: a momentary upstream hiccup entered the same channel as a
+  finding about this repository, so the daily gate goes red for an event that says nothing about
+  the deposit. `zenodo_records()` treated every transport answer as final; for a 4xx that is
+  correct, for a 5xx it is not. The retryable statuses (429/500/502/503/504) are now retried up
+  to three times with linear backoff, and the retry is **bounded** so it cannot become an
+  exemption — when the attempts run out the finding stands and now carries `after N attempts`,
+  which makes a flake distinguishable from a wall. `R3-retry-recovers` requires a 504-then-good
+  sequence to be decided by the second answer; `R3-retry-exhausted` requires three 504s to still
+  fail and to name the attempt count. Both cases were added and run **before** the retry existed
+  (`selftest FAILED: 2 of 32`), so they are shown able to fail rather than assumed to be. A 400
+  is still reported on the first reply and is still asked exactly once. `--selftest` goes from
+  30 cases to 32.
 - **A 200 the gate could not read was reported as a concept with nothing under it** (D-032),
   found by the scheduled `release-face-remote.yml` run and confirmed by an outside-in pass that
   resolved the concept DOI against the records API instead of trusting the gate's sentence.
