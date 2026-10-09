@@ -38,6 +38,27 @@ canonical 引用必须一致、且指向一个真实存在且自洽的 tag；set
 另：`--ref` 不再硬编码。2026-10-07 前三处调用都写死 `--ref v0.1.0`，改锚时必有一处漏改 ——
 硬编码版本号本身就是第二个真源。现改为从 README 的 canonical 推导。
 
+2026-10-09 —— `--allow-absent-canonical-tag`（一个自己制造的僵局）：
+
+  本门禁的远程检查要求「声明了 canonical 锚 ⇒ 该 tag 必须能解析到」。这对**发布后**是对的，
+  但 main 的分支保护把 `gates · python 3.9/3.12` 列为必需检查，而本门禁在那两个 job 里跑 ——
+  于是**升版本号的 PR 会把自己挡在门外**：PR 里 README 写 `v0.1.2` → tag 尚不存在 → 本门禁红 →
+  必需检查不过 → 合不进去 → tag 永远建不出来。实测确认（2026-10-09，`gh api` 读保护规则：
+  contexts 含 `gates · python 3.9`、`gates · python 3.12`、`strict: true`、`enforce_admins: true`）。
+
+  一个**发布时刻**的属性不该在**评审时刻**拦人。补法不是删检查，是把它挪到答得出来的时刻：
+
+    * 本门禁在 CI 的 push/PR 形态加 `--allow-absent-canonical-tag`：**只**容忍 canonical tag
+      取不到（404 / Not Found），且把这一条**明确打印**为「尚未发布」，不是静默放行；
+      任何其它解析错误（网络、权限、非 JSON）照旧 FAIL。
+    * 严格形态（tag 必须存在、Release 必须存在、Zenodo 必须已沉积）由
+      `.github/workflows/release-face-remote.yml` 每日 + 每次 Release 跑
+      （`tools/verify_release_face.py` 的 R1–R5），并在 `docs/pull-request-workflow.md` 里
+      写明「升版本号的提交必须与它的 tag 同批落地」。
+
+  所以这一条的净效果是**覆盖面变大**：原先只有「tag 能不能解析」一个时刻，现在多了一个
+  在发布时刻问得更全的门，而 PR 时刻不再被一个当时无解的问题卡住。
+
 用法
 ----
   python verify_release_consistency.py --repo-path . [--ref v0.1.1] [--repo owner/name]
@@ -137,6 +158,16 @@ def remote_canonical(repo, ref):
         return ("err", str(e)[:160])
 
 
+def looks_like_missing_ref(msg):
+    """「这个 tag 还不存在」与「这次解析没跑成」必须分开判。
+
+    只有前者可以放行（且必须打印），后者一律 FAIL —— 把「跑不起来」读成「没有」正是
+    本 catalog 命名的病（2026-10-07 那次缺 GH_TOKEN 的静默跳过就是它）。
+    """
+    low = (msg or "").lower()
+    return "404" in low or "not found" in low
+
+
 def manifest_check(repo_path):
     """委派 tools/make-manifest.py --check。返回 (exit_code, output)。
 
@@ -191,6 +222,10 @@ def main():
     ap.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""),
                     help="owner/name；提供则额外校验 tag 指向的快照自洽")
     ap.add_argument("--no-remote", action="store_true")
+    ap.add_argument("--allow-absent-canonical-tag", action="store_true",
+                    help="发布前形态：canonical tag 尚不存在时打印「尚未发布」并放行"
+                         "（只放行 404/Not Found；其它解析错误照旧 FAIL）。"
+                         "严格形态由 .github/workflows/release-face-remote.yml 承担。")
     args = ap.parse_args()
 
     rp = args.repo_path
@@ -278,6 +313,7 @@ def main():
 
     # 7) 远程 tag 自洽
     remote_note = "未启用（无仓上下文或 --no-remote）"
+    tolerated_absent_tag = False
     if args.repo and not args.no_remote:
         if not ref:
             fails.append("无法确定 canonical tag：README/INTEGRITY 未声明，且未提供 --ref")
@@ -285,10 +321,18 @@ def main():
         else:
             rc = remote_canonical(args.repo, ref)
             if rc and rc[0] == "err":
-                # 「跑不起来」不是「通过」。2026-10-07 实证：CI 缺 GH_TOKEN，这里一直
-                # 静默跳过，门禁仍打印 ✅ 并 exit 0 —— 本 catalog 所命名的病。
-                fails.append(f"远程 tag {ref} 无法解析：{rc[1]}")
-                remote_note = "❌ 无法解析（声明了锚就必须能解析到它）"
+                if args.allow_absent_canonical_tag and looks_like_missing_ref(rc[1]):
+                    # 声明了锚、锚还没建 —— 这是「发布尚未完成」，不是「不一致」。打印出来，
+                    # 不静默：静默放行等于把这次检查变成装饰品。
+                    tolerated_absent_tag = True
+                    remote_note = ("⏳ 尚未发布（declared canonical %s 的 tag 还不存在）"
+                                   "—— 本次放行受 --allow-absent-canonical-tag 管辖；"
+                                   "严格形态见 release-face-remote.yml" % ref)
+                else:
+                    # 「跑不起来」不是「通过」。2026-10-07 实证：CI 缺 GH_TOKEN，这里一直
+                    # 静默跳过，门禁仍打印 ✅ 并 exit 0 —— 本 catalog 所命名的病。
+                    fails.append(f"远程 tag {ref} 无法解析：{rc[1]}")
+                    remote_note = "❌ 无法解析（声明了锚就必须能解析到它）"
             elif rc and c_r and rc != c_r:
                 fails.append(f"远程 tag {ref} 指向的快照 canonical={rc} ≠ 本地 canonical={c_r}")
                 remote_note = "❌ 不一致"
@@ -324,6 +368,9 @@ def main():
             print("   ❌ " + f)
         sys.exit(1)
     print("═ 判定：✅ 一致（canonical 自洽、manifest 与该树一致、set digest 对齐、许可证在位）")
+    if tolerated_absent_tag:
+        print("   ⏳ 但 canonical tag 尚未建立：本次是**发布前形态**放行，"
+              "「tag / Release / Zenodo 是否真的到位」由 release-face-remote.yml 在发布时刻检查。")
     sys.exit(0)
 
 

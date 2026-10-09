@@ -1,0 +1,114 @@
+name: release-face-remote
+
+# Why this file exists, and why it is not a job inside gates.yml
+# -------------------------------------------------------------
+# tools/verify_release_face.py checks two different kinds of thing. The in-tree
+# half -- one version, both DOIs, the archived label, the release date, told the
+# same way in README / INTEGRITY / .zenodo.json / CITATION.cff / llms.txt /
+# docs/where-to-find-us.md -- can be answered from the checkout, so it runs in
+# gates.yml on every push and every pull request (gate 17).
+#
+# The published half cannot. "The declared canonical tag exists", "a Release was
+# published for it", "Zenodo holds a record carrying that version", "main is
+# protected", "every required status check is reported by a job that exists" are
+# statements about artifacts, and at pull-request time they have no answer yet:
+# the version bump that creates the tag cannot be merged until the tag exists,
+# and the tag should not exist before the bump is merged. That loop is not
+# hypothetical -- `gates.yml` is a required check on `main` (strict, admins
+# enforced), so a gate that demands the tag at review time is a gate that blocks
+# its own release. The scopes are therefore split by event, not by strength.
+#
+# 2026-10-09, read from the published artifacts before writing any of this: the
+# README's canonical tag was v0.1.1 while llms.txt and docs/where-to-find-us.md
+# said 0.1.0, INTEGRITY's Zenodo line said 0.1.0, no GitHub Release had ever been
+# published for v0.1.1, and Zenodo's only record (concept 23051637) was version
+# 0.1.0. Every one of those survived every gate in the repository.
+#
+# Triggers
+# --------
+#   schedule        -- from the default branch; the only trigger that cannot be
+#                      affected by a stale tag. Catches a Release or a Zenodo
+#                      record that drifts after the fact, within a day.
+#   release         -- the moment the published faces have just been created.
+#                      NOTE: GitHub uses the version of a workflow that is present
+#                      in the ref the event belongs to (docs, "Events that trigger
+#                      workflows"), so this trigger runs the copy inside the tag
+#                      that was released -- not the copy on main. That is why the
+#                      schedule and workflow_dispatch triggers exist.
+#   workflow_dispatch -- run it by hand before publishing anything.
+#
+# A failure here is not a red dot nobody opens: on the scheduled run it also
+# files (or updates) an issue, because a detector whose only output is a colour
+# is the failure this catalogue is about.
+
+on:
+  schedule:
+    # Daily, off the hour. Zenodo rate-limits generously but there is no reason
+    # to join the top-of-hour crowd.
+    - cron: "17 6 * * *"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # Used once, on failure, to make the failure readable without a login.
+  issues: write
+
+concurrency:
+  group: release-face-remote
+  cancel-in-progress: false
+
+jobs:
+  release-face-remote:
+    # The job name is load-bearing in the same way the negative-control job's name
+    # is: if it is ever added to the required status checks on main, a required
+    # check is matched by name. Do NOT add it to that list before this job has
+    # reported at least once -- a required check that has never run waits forever
+    # for a context nothing will ever send, and that dead rule looks exactly like
+    # a passing one.
+    name: release face · published artifacts
+    runs-on: ubuntu-latest
+    env:
+      # `gh` is preinstalled on the runner and unauthenticated without this.
+      # R4 (main is protected) needs it; R5 (required checks) needs more than
+      # this token can have, and says so rather than passing quietly.
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: published faces (tag · Release · Zenodo · branch protection)
+        run: python tools/verify_release_face.py --repo-path . --repo "${{ github.repository }}"
+
+      # Only on the scheduled run: a `release` run that fails is already visible
+      # on the release page, and filing an issue for a release still in flight
+      # would be noise. The scheduled run is the one nobody is watching.
+      - name: file or update the drift issue
+        if: failure() && github.event_name == 'schedule'
+        run: |
+          set -u
+          title="release face drift: a published artifact disagrees with the repository"
+          body="$(printf '%s\n' \
+            "The scheduled release-face check failed on $(date -u '+%Y-%m-%dT%H:%M:%SZ')." \
+            "" \
+            "Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            "" \
+            "What it checks, and what each failure means, is documented at the top of" \
+            ".github/workflows/release-face-remote.yml and in tools/verify_release_face.py." \
+            "The job log names the face, the value found, and the value expected.")"
+          number="$(gh issue list --state open --label release-face \
+                    --json number --jq '.[0].number // empty' 2>/dev/null || true)"
+          if [ -z "$number" ]; then
+            number="$(gh issue list --state open --search "in:title \"$title\"" \
+                      --json number --jq '.[0].number // empty' 2>/dev/null || true)"
+          fi
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body" --label release-face \
+              || gh issue create --title "$title" --body "$body"
+          fi
