@@ -45,11 +45,15 @@ Required status checks are evaluated **after** a commit exists. So the order is 
 1. you push a commit to `main`
 2. GitHub asks: do the three required checks pass **for this commit**?
 3. the run has not started yet — it starts *because of* this push
-4. the checks are not passing, so the push is rejected
-5. the run that would have passed them never got a chance to start
+4. the checks are not passing, so the push is rejected:
+   ```
+   remote: error: GH006: Protected branch update failed for refs/heads/main.
+   remote: - 3 of 3 required status checks are expected.
+   ```
 
-This is not a misconfiguration. It is the two rules contradicting each other. No setting
-combines them into something that works, because the trigger is the thing being blocked.
+That rejection is not a deadlock — it is a redirect. The same commit can still reach `main` by a
+route that lets the checks run first, which is what the next section describes. What does not work
+is only the one path: pushing straight to `main`.
 
 ---
 
