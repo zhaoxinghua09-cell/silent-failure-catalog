@@ -489,7 +489,23 @@ class RealAPI(object):
                 data = json.loads(body)
             except ValueError as e:
                 return (None, "Zenodo returned non-JSON (%s)" % e)
-            for hit in ((data or {}).get("hits") or {}).get("hits") or []:
+            # A 200 whose body is not the search envelope is not an empty result.
+            # On 2026-10-09 the remote run printed `R3 FAIL no record under the
+            # concept` for a concept Zenodo's own API lists two published records
+            # under: the body had parsed, but it carried no `hits` object, and
+            # `((data or {}).get("hits") or {}).get("hits") or []` quietly made
+            # "field absent" read as "records absent". Requiring the envelope --
+            # and reporting the keys that did arrive -- separates "nothing is
+            # there" from "this page cannot be read", which are two different
+            # findings and must not share one sentence.
+            hits_obj = (data or {}).get("hits")
+            if not isinstance(hits_obj, dict) or "total" not in hits_obj:
+                keys = ", ".join(sorted((data or {}).keys()))[:160] or "(none)"
+                return (None,
+                        "Zenodo answered HTTP 200 but not with a records "
+                        "envelope (top-level keys: %s) -- an unreadable page is "
+                        "not an empty concept" % keys)
+            for hit in hits_obj.get("hits") or []:
                 md = hit.get("metadata") or {}
                 out.append({
                     "doi": hit.get("doi"),
@@ -1043,6 +1059,32 @@ def selftest():
              expect_api_calls={"zen": 1},
              want_fail_text="refused the request (HTTP 400)",
              forbid_fail_text="unreachable")
+    # The 2026-10-09 remote run printed `R3 FAIL  no record under the concept`
+    # against a concept that Zenodo's own API returns two published records for.
+    # The query had not been refused and the network was up: the body simply was
+    # not the search envelope this code assumes, and
+    # `((data or {}).get("hits") or {}).get("hits") or []` turned an unreadable
+    # page into an empty result -- the absence of a *field* recorded as the
+    # absence of *records*. That is this catalogue's own subject matter, found in
+    # this catalogue's own gate. The case pins the distinction the fix depends
+    # on: a 200 we cannot read must never be reported as a concept with nothing
+    # under it.
+    run_case("R3-envelope-shape", "a 200 that is not a records envelope is not "
+             "reported as an empty concept",
+             api=_TransportAPI(pages=[(json.dumps({
+                 "status": 200, "message": "shape this gate does not know"}), 200)]),
+             expect_api_calls={"zen": 1},
+             want_fail_text="not with a records envelope",
+             forbid_fail_text="no record under the concept")
+    # The counterpart, so the fix cannot pass by refusing to ever call a concept
+    # empty: a well-formed envelope that really holds nothing must still be named
+    # as an empty concept.
+    run_case("R3-genuinely-empty", "a real empty envelope is still named an empty "
+             "concept (the shape check must not over-correct)",
+             api=_TransportAPI(pages=[(json.dumps({
+                 "hits": {"total": 0, "hits": []}, "links": {}}), 200)]),
+             expect_api_calls={"zen": 1},
+             want_fail_text="no record at all under concept")
     _filler = [{"id": 11110200 + i, "doi": "10.5281/zenodo.%d" % (11110200 + i),
                 "submitted": True, "created": "2025-01-01T00:00:00Z",
                 "metadata": {"version": "9.8.%d" % i}} for i in range(25)]
@@ -1052,10 +1094,11 @@ def selftest():
               "created": "2026-01-03T00:00:00Z", "metadata": {"version": "9.9.9"}}]
     run_case("R3-paginated", "a concept with more versions than fit on one page",
              api=_TransportAPI(pages=[
-                 (json.dumps({"hits": {"hits": _filler},
+                 (json.dumps({"hits": {"total": 27, "hits": _filler},
                               "links": {"next":
                                         "https://zenodo.org/api/records?page=2"}}), 200),
-                 (json.dumps({"hits": {"hits": _tail}, "links": {}}), 200)]),
+                 (json.dumps({"hits": {"total": 27, "hits": _tail},
+                              "links": {}}), 200)]),
              expect_api_calls={"zen": 2}, want_fail=False)
     run_case("R4-unprotected", "main is not protected",
              api=FakeAPI(protected=False), expect_api_calls={"gh": 1})

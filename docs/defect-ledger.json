@@ -1,6 +1,6 @@
 {
   "schema": "defect-ledger/1",
-  "as_of": "2026-10-09",
+  "as_of": "2026-10-10",
   "purpose": "Every defect this repository has ever found -- in its tools, in its examples, or in its own documentation -- gets one record. The record is closed only when it answers four questions mechanically: (1) what shape was the defect (class), (2) why did our checking miss it (escape_cause), (3) what root cause was changed, (4) what gate now kills this class and how that gate was shown to fire. A defect recorded as prose cannot be interrogated; a defect recorded here can be, by tools/defect-closure.py.",
   "escape_cause_taxonomy": {
     "E1": "no gate existed at the time the defect was made",
@@ -441,6 +441,20 @@
       "root_cause": "The canary's failure branch had never run, so nobody had ever read it: `\"the fake API was called %d time(s), expected >= %d\" % (k, got, want)` feeds the dict key (`\"zen\"`) to the first `%d`. Every prior case either satisfied its canary or failed earlier for another reason, which is exactly the state a check is in when it has not been shown capable of failing. The consequence was not a silent pass but something nearly as bad: the case's real diagnosis was replaced by a traceback pointing at the reporter, so the reader is told to fix the wrong file.",
       "gate_added": "The message is repaired and names the counter it is about. More to the point, the defect was found by mutation rather than by a scenario, and the mutation that found it is now the reason the branch exists: `R3-paginated` is the first case in the suite whose canary can fail, and the k mutation that removes the pagination walk is what drives it.",
       "evidence": "Before: the pagination mutation produced `TypeError: %d format: a real number is required, not str` with no case lines, and the mutation harness could not tell a caught mutation from a crashed run. After: the same mutation reports `R3-paginated` as the failing case, by name, which is what makes the pagination walk a load-bearing step rather than a decoration.",
+      "siblings_scanned": true,
+      "closed": true
+    },
+    {
+      "id": "D-032",
+      "date": "2026-10-10",
+      "source": "external-review",
+      "symptom": "The strict published-face run printed `R3   Zenodo record   FAIL   no record under the concept` and `verdict: FAIL -- 1 finding(s)`, against a concept under which Zenodo's own records API returns two published records. The gate did not stay silent -- it fired and named a cause that was false. A reader acts on 'there is nothing deposited' by depositing again; there was nothing to deposit.",
+      "class": "SF-012",
+      "escape_cause": "E2",
+      "found_by": "the scheduled release-face-remote.yml run 37958934049, surfaced by an outside-in verification pass on 2026-10-10 that resolved the concept DOI against the records API directly instead of trusting the gate's sentence",
+      "root_cause": "`((data or {}).get('hits') or {}).get('hits') or []` in `zenodo_records()` gave one value -- the empty list -- to two different situations: 'the concept holds nothing' and 'this body is not the search envelope this code knows how to read'. A transport that answers 200 with a shape the code cannot parse therefore arrives at the caller as an empty result, and the caller had a sentence ready for an empty result. That is SF-004 (`or []` as a sentinel for failure) wearing the face of SF-012 (the check fails and blames the wrong cause). It is the second escape of the class D-029 closed the same day: D-029 fixed the shape it had been shown -- an HTTP refusal, and a body that is not JSON -- and the case set it added (`R3-api-refused`, `R3-paginated`) never contained a 200 whose body *parses* but is not the envelope. The instance was closed; the class was not.",
+      "gate_added": "(1) `tools/verify_release_face.py` `zenodo_records()` now requires `hits` to be an object carrying `total` before any record is counted, and otherwise returns an unreadable-page refusal that names the top-level keys it did receive, so 'nothing is there' and 'this page cannot be read' are two findings with two sentences. (2) Two cases in the selftest: `R3-envelope-shape`, a negative control feeding a 200 body that is not the envelope and requiring the failure to name the shape and to not contain the string 'no record under the concept'; and `R3-genuinely-empty`, its positive counterpart, which requires a well-formed envelope holding nothing to still be named an empty concept so the shape check cannot pass by never calling a concept empty. (3) The `R3-paginated` fixture now carries the envelope's `total`, because the fixture, not the API, was the thing that omitted it.",
+      "evidence": "On the unmodified file the new case produced `R3: Zenodo holds no record at all under concept 10.5281/zenodo.11111110` -- a definite finding manufactured from an unreadable page, reproducing the remote run. With the change, the same input yields `Zenodo answered HTTP 200 but not with a records envelope (top-level keys: message, status)`, the fabricated sentence is absent (`forbid_fail_text`), and the suite is 30/30 where it was 28/28 before. The in-tree scope (`--no-remote`) still prints `verdict: PASS -- every face tells the same story`, and `tools/make-manifest.py --check` reported `modified: tools/verify_release_face.py` before regeneration, so the content manifest is a gate that fires rather than a decoration.",
       "siblings_scanned": true,
       "closed": true
     }
