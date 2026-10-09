@@ -51,6 +51,35 @@ Gates 9 and 10, three new hard rules, and the closure of an external review roun
 
 ### Fixed
 
+- **A search index's silence was published as a statement about what Zenodo holds** (D-034),
+  found by the convergence re-run of the two fixes above (run 37966943415, which already ran
+  them: `headSha` 56b09261). R3 decided what a concept *contains* by asking a **search**
+  (`/api/records?q=conceptrecid:...&allversions=true&size=25`), and when that search answered CI
+  with a readable envelope holding nothing, R3 printed *"Zenodo holds no record at all under
+  concept 10.5281/zenodo.23051637"* — while the concept held two published records, and the same
+  URL answered `hits.total = 2` from two other networks. The run's own timestamps settle that
+  this was not a transport failure (the step took ~2.0 s; any retry costs >= 3 s), so the
+  response was a 200 that parsed and passed the D-032 shape check: an *index* that was silent,
+  read as a fact about the world. A search is a proxy for a concept's contents, and a proxy is
+  evidence that can be true while the claim is false — the catalogue's own subject, found in its
+  own gate. The gate now **reads** instead of searching: `zenodo_concept()` reads
+  `/api/records/<conceptrecid>` (the URL a record's own `links.parent` advertises; measured to
+  answer with the newest record, and `404 {"status": 404, "message": "The persistent identifier
+  does not exist."}` for an id that is not there), and `zenodo_records()` enumerates through the
+  record's own `links.versions` — `/api/records/<recid>/versions`, the endpoint InvenioRDM
+  documents for "get all versions". Neither touches `q=`. `recs == []` now means "the read
+  resolved and the family is empty"; an unreadable answer is `None`, a probe failure, never
+  absence. A 404 counts as absence only when Zenodo's own error envelope says so; any other 404
+  body is reported as unreadable, because the status a gate most wants to believe is the one it
+  should verify hardest. The `q=` search survives as `zenodo_search()`, run every time and
+  written to `notes` as an `R3 cross-door:` line, so a disagreement between two of Zenodo's own
+  doors leaves evidence instead of a puzzle — and never decides the verdict. `run_case` now
+  accepts several `want_fail_text` strings and requires all of them, so a finding can be pinned
+  to its claim *and* its evidence. `--selftest` goes from 32 cases to 36; the discriminator case
+  `R3-read-not-search` was proven by driving one transport through three generations of the
+  function (`build/sfc/l6_read_not_search.py`): the pre-D-032 revision returns `[]` — the exact
+  false verdict — HEAD returns `None` — a false "cannot verify" on a healthy concept — and this
+  fix returns the two records.
 - **A gateway timeout was published as repository drift** (D-033), found by the scheduled run
   that re-verified the fix above. That run reported `R3 Zenodo record FAIL — Zenodo refused the
   request (HTTP 504)` — a true cause, correctly named, which was the point of the previous fix.

@@ -157,6 +157,27 @@ ZENODO_PAGE_LIMIT = 20
 ZENODO_ATTEMPTS = 3
 ZENODO_RETRY_STATUS = (429, 500, 502, 503, 504)
 _RETRY_SLEEP = time.sleep
+# A concept has two doors and, until 2026-10-10, this gate only ever knocked on
+# one of them. `/api/records?q=conceptrecid:...` is a *search*: it answers with an
+# envelope over an index. `/api/records/<conceptrecid>` is a *read*, and it is the
+# URL a record's own `links.parent` advertises. Measured on 2026-10-10 against
+# concept 10.5281/zenodo.23051637: the read answered HTTP 200 with the concept's
+# newest record object, and against an id that is not there it answered
+# `404 {"status": 404, "message": "The persistent identifier does not exist."}`.
+# That asymmetry is the whole point -- a search that comes back empty is evidence
+# about the search, and only a read that 404s is evidence about the concept. On
+# 2026-10-10 the search door answered CI with a readable envelope holding nothing
+# while the concept read resolved and the version family listed two published
+# records, and this gate printed `no record under the concept`: a statement about
+# Zenodo's holdings, made from an index that was silent.
+ZENODO_CONCEPT_API = ZENODO_API + "/%s"
+# The endpoint InvenioRDM documents for "get all versions" (a record's own
+# `links.versions` names it). It takes a *recid*, not a concept id -- measured
+# 2026-10-10: `/api/records/23051637/versions` is 404 while
+# `/api/records/23260442/versions` answers `{"hits": {"total": 2, ...}}` listing
+# every version of the family. So the read above is what turns the concept id
+# declared in-tree into a recid the version list can be asked about.
+ZENODO_VERSIONS_API = ZENODO_API + "/%s/versions"
 WORKFLOW_DIR = os.path.join(".github", "workflows")
 
 
@@ -470,77 +491,101 @@ class RealAPI(object):
         """Split out like `_open`, so a case can drive retry timing without waiting."""
         _RETRY_SLEEP(seconds)
 
-    def zenodo_records(self, concept_doi):
-        # Unauthenticated callers are capped at 25 records per page. Asking for
-        # 100 is not a larger request, it is a rejected one: on 2026-10-09 this
-        # probe asked for `size=100` against the concept DOI and Zenodo answered
-        # 400 -- {"status":400,"message":"A validation error occurred.",
-        # "errors":[{"field":"size","messages":["Page size cannot be greater than
-        # 25. Please use authenticated requests to increase the limit to 100."]}]}
-        # -- which the blanket `except` below turned into "Zenodo API unreachable
-        # from here". A wrong cause, printed as a finding, is how a real defect
-        # survives: the reader goes looking at the network. So the pages are
-        # walked instead of assumed, the query names the field Zenodo indexes for
-        # this (`conceptrecid`, not the concept DOI string), and an HTTP status is
-        # reported as a refusal that carries its own code and body.
-        out = []
-        url = "%s?q=conceptrecid:%s&allversions=true&size=25" % (
-            ZENODO_API, zenodo_id(concept_doi))
-        for _ in range(ZENODO_PAGE_LIMIT):
-            req = urllib.request.Request(url, headers={
-                "Accept": "application/json", "User-Agent": "verify_release_face"})
-            # A gateway timeout is a statement about the gateway. Retrying it is the
-            # ordinary remedy, and the retry is bounded so it can never become an
-            # exemption: when the attempts run out the finding stands and says how
-            # many were made. Only statuses that mean "try again later" are retried;
-            # a 4xx is the answer, not a hiccup, and is reported on the first reply.
-            body = None
-            for attempt in range(1, ZENODO_ATTEMPTS + 1):
+    def _zenodo_get(self, url):
+        """One bounded attempt loop over one GET.
+
+        Returns ``(body, status, error)``; ``error`` is a dict carrying ``status``
+        (the HTTP code, when there was one) and ``why`` (the sentence a finding
+        should repeat). Both doors share this one retry policy rather than keeping
+        two copies of it, and both are reachable from a case, so a retry can be
+        driven without waiting on it.
+
+        A gateway timeout is a statement about the gateway. Retrying it is the
+        ordinary remedy, and the retry is bounded so it can never become an
+        exemption: when the attempts run out the finding stands and says how many
+        were made. Only statuses that mean "try again later" are retried; a 4xx is
+        the answer, not a hiccup, and is reported on the first reply.
+        """
+        req = urllib.request.Request(url, headers={
+            "Accept": "application/json", "User-Agent": "verify_release_face"})
+        for attempt in range(1, ZENODO_ATTEMPTS + 1):
+            try:
+                with self._open(req) as resp:
+                    body = resp.read().decode("utf-8", "replace")
+                    status = getattr(resp, "status", None)
+                return (body, status, None)
+            except urllib.error.HTTPError as e:
                 try:
-                    with self._open(req) as resp:
-                        body = resp.read().decode("utf-8", "replace")
-                    break
-                except urllib.error.HTTPError as e:
-                    try:
-                        detail = e.read().decode("utf-8", "replace").strip()[:300]
-                    except Exception:                    # noqa: BLE001
-                        detail = ""
-                    if (e.code in ZENODO_RETRY_STATUS
-                            and attempt < ZENODO_ATTEMPTS):
-                        self._sleep(attempt)             # 1s, 2s -- bounded, no jitter
-                        continue
-                    after = ("" if attempt == 1
-                             else " after %d attempts" % attempt)
-                    return (None, "Zenodo refused the request (HTTP %s)%s: %s"
-                                  % (e.code, after, detail or "(no body)"))
-                except Exception as e:  # noqa: BLE001 - other transport failure is the message
-                    if attempt < ZENODO_ATTEMPTS:
-                        self._sleep(attempt)
-                        continue
-                    return (None, "Zenodo API unreachable from here (%s)" % e)
-            if body is None:
-                return (None, "Zenodo gave no answer after %d attempts"
-                              % ZENODO_ATTEMPTS)
+                    detail = e.read().decode("utf-8", "replace").strip()[:300]
+                except Exception:                    # noqa: BLE001
+                    detail = ""
+                if e.code in ZENODO_RETRY_STATUS and attempt < ZENODO_ATTEMPTS:
+                    self._sleep(attempt)             # 1s, 2s -- bounded, no jitter
+                    continue
+                after = "" if attempt == 1 else " after %d attempts" % attempt
+                return (None, e.code, {
+                    "status": e.code, "body": detail,
+                    "why": "Zenodo refused the request (HTTP %s)%s: %s"
+                           % (e.code, after, detail or "(no body)")})
+            except Exception as e:  # noqa: BLE001 - other transport failure is the message
+                if attempt < ZENODO_ATTEMPTS:
+                    self._sleep(attempt)
+                    continue
+                return (None, None, {
+                    "status": None, "body": "",
+                    "why": "Zenodo API unreachable from here (%s)" % e})
+        return (None, None, {
+            "status": None, "body": "",
+            "why": "Zenodo gave no answer after %d attempts" % ZENODO_ATTEMPTS})
+
+    @staticmethod
+    def _records_envelope(data, what):
+        """The `hits` object of a search-style envelope, or a refusal to read it.
+
+        A 200 whose body is not the envelope is not an empty result. On 2026-10-09
+        the remote run printed `R3 FAIL no record under the concept` for a concept
+        Zenodo's own API lists two published records under: the body had parsed,
+        but `((data or {}).get("hits") or {}).get("hits") or []` quietly made
+        "field absent" read as "records absent". Requiring the envelope -- and
+        reporting the keys that did arrive -- separates "nothing is there" from
+        "this page cannot be read", which are two different findings and must not
+        share one sentence.
+        """
+        hits_obj = (data or {}).get("hits")
+        if not isinstance(hits_obj, dict) or "total" not in hits_obj:
+            keys = ", ".join(sorted((data or {}).keys()))[:160] or "(none)"
+            return (None, "%s answered HTTP 200 but not with a records envelope "
+                          "(top-level keys: %s) -- an unreadable page is not an "
+                          "empty result" % (what, keys))
+        return (hits_obj, None)
+
+    def _walk_envelope(self, url, what):
+        """Walk a search-style envelope to its last page.
+
+        Returns ``(records, note, error)``. The note is returned even on success,
+        because it is also the evidence a passing run should not have to re-fetch.
+        The walk follows the API's own `links.next` rather than synthesising
+        `page=2`, so it follows the index's own ordering, and an unauthenticated
+        caller is never assumed to fit in one page: asking for `size=100` is not a
+        larger request, it is a rejected one -- Zenodo answers 400, "Page size
+        cannot be greater than 25. Please use authenticated requests to increase
+        the limit to 100" -- which a blanket `except` once reported as
+        unreachability.
+        """
+        out, pages, status, total = [], 0, None, None
+        for _ in range(ZENODO_PAGE_LIMIT):
+            body, status, err = self._zenodo_get(url)
+            if err is not None:
+                return (None, None, err["why"])
+            pages += 1
             try:
                 data = json.loads(body)
             except ValueError as e:
-                return (None, "Zenodo returned non-JSON (%s)" % e)
-            # A 200 whose body is not the search envelope is not an empty result.
-            # On 2026-10-09 the remote run printed `R3 FAIL no record under the
-            # concept` for a concept Zenodo's own API lists two published records
-            # under: the body had parsed, but it carried no `hits` object, and
-            # `((data or {}).get("hits") or {}).get("hits") or []` quietly made
-            # "field absent" read as "records absent". Requiring the envelope --
-            # and reporting the keys that did arrive -- separates "nothing is
-            # there" from "this page cannot be read", which are two different
-            # findings and must not share one sentence.
-            hits_obj = (data or {}).get("hits")
-            if not isinstance(hits_obj, dict) or "total" not in hits_obj:
-                keys = ", ".join(sorted((data or {}).keys()))[:160] or "(none)"
-                return (None,
-                        "Zenodo answered HTTP 200 but not with a records "
-                        "envelope (top-level keys: %s) -- an unreadable page is "
-                        "not an empty concept" % keys)
+                return (None, None, "Zenodo returned non-JSON (%s)" % e)
+            hits_obj, unreadable = self._records_envelope(data, what)
+            if unreadable is not None:
+                return (None, None, unreadable)
+            total = hits_obj.get("total")
             for hit in hits_obj.get("hits") or []:
                 md = hit.get("metadata") or {}
                 out.append({
@@ -549,13 +594,113 @@ class RealAPI(object):
                     "published": bool(hit.get("submitted")),
                     "created": hit.get("created") or "",
                 })
-            # The API hands back the next page as a link; follow it rather than
-            # synthesising `page=2`, so the walk follows the index's own ordering.
             nxt = ((data or {}).get("links") or {}).get("next") or ""
             if not nxt:
                 break
             url = nxt
-        return (out, "%d record(s)" % len(out))
+        note = "HTTP %s, hits.total=%s, %d record(s) in %d page(s)" % (
+            status, total, len(out), pages)
+        return (out, note, None)
+
+    @staticmethod
+    def _concept_absence(url, body):
+        """``(result, why)`` for a 404 at the concept door.
+
+        A 404 is evidence that the concept is absent only when Vol. 2 -- Zenodo
+        itself -- is the one speaking. Measured 2026-10-10 on an id that is not
+        there: `404 {"status": 404, "message": "The persistent identifier does not
+        exist."}`. A 404 that is *not* that -- an HTML block page from something
+        sitting in front of Zenodo, say -- is an answer this probe cannot read, and
+        reading it as absence would repeat the same error one layer down: a page
+        that cannot be parsed, recorded as a fact about the world. So the body has
+        to name a missing identifier in Zenodo's own error envelope, and when it
+        does not, both the body and the refusal are printed.
+        """
+        try:
+            data = json.loads(body or "")
+        except ValueError:
+            data = None
+        if isinstance(data, dict) and data.get("status") == 404:
+            return (False, "the concept read answered HTTP 404 at %s: %s"
+                           % (url, data.get("message") or "(no message)"))
+        return (None, "the concept read answered HTTP 404 at %s but not with "
+                      "Zenodo's own error body (%s) -- an answer this probe cannot "
+                      "read is not evidence that the concept is absent"
+                      % (url, (body or "(no body)").strip()[:200]))
+
+    def zenodo_concept(self, concept_doi):
+        """Read the concept itself -- the door that is not a search.
+
+        ``(True, info)`` when the concept resolves, ``(False, why)`` when Zenodo
+        says the identifier does not exist, ``(None, why)`` when the answer cannot
+        be read at all. Only the middle case is evidence about the concept; the
+        third is evidence about this probe, and the caller must not let the two
+        share a sentence.
+        """
+        url = ZENODO_CONCEPT_API % zenodo_id(concept_doi)
+        body, status, err = self._zenodo_get(url)
+        if err is not None:
+            if err.get("status") == 404:
+                return self._concept_absence(url, err.get("body"))
+            return (None, err["why"])
+        if status == 404:
+            return self._concept_absence(url, body)
+        try:
+            data = json.loads(body)
+        except ValueError as e:
+            return (None, "the concept read returned non-JSON (%s)" % e)
+        if not isinstance(data, dict) or "conceptrecid" not in data:
+            keys = ", ".join(sorted((data or {}).keys()))[:160] or "(none)"
+            return (None, "the concept read answered HTTP %s but not with a record "
+                          "object (top-level keys: %s)" % (status, keys))
+        return (True, {
+            "recid": str(data.get("id") or data.get("recid") or ""),
+            "doi": data.get("doi"),
+            "version": (data.get("metadata") or {}).get("version"),
+            "versions_url": (data.get("links") or {}).get("versions") or "",
+            "url": url,
+        })
+
+    def zenodo_records(self, concept_doi):
+        """Every version under the concept -- read, not searched.
+
+        `recs` is `None` when the answer could not be read (a finding about this
+        probe), `[]` when the read resolved and the family really is empty (a
+        finding about the concept), and the records otherwise. The two have to
+        stay apart: the 2026-10-10 defect was exactly one being read as the other.
+        """
+        state, info = self.zenodo_concept(concept_doi)
+        if state is False:
+            return ([], info)
+        if state is None:
+            return (None, info)
+        url = info["versions_url"] or (ZENODO_VERSIONS_API % info["recid"])
+        recs, note, err = self._walk_envelope(url, "the versions endpoint")
+        if err is not None:
+            return (None, err)
+        if not recs:
+            return ([], "concept %s resolved (%s) and its version family came back "
+                        "empty -- %s, url %s"
+                        % (concept_doi, info["url"], note, url))
+        return (recs, "%d record(s) read from the concept's own version family "
+                      "(%s)" % (len(recs), note))
+
+    def zenodo_search(self, concept_doi):
+        """What the *search* index says -- kept only to be reported beside the read.
+
+        Never allowed to decide the verdict. On 2026-10-10 this is the door that
+        came back empty from CI while the concept read resolved and the version
+        family held two published records. A disagreement between two of Zenodo's
+        own doors is worth recording on every run -- it is the evidence that
+        closes that question -- but it is not repository drift, and a gate that
+        let it decide would be back where it started.
+        """
+        url = "%s?q=conceptrecid:%s&allversions=true&size=25" % (
+            ZENODO_API, zenodo_id(concept_doi))
+        recs, note, err = self._walk_envelope(url, "the search endpoint")
+        if err is not None:
+            return (None, err)
+        return (len(recs), note)
 
 
 def workflow_job_name_patterns(repo_path):
@@ -693,9 +838,20 @@ def run_remote(repo_path, repo, api, facts, fails, not_verified, zenodo=True,
         fails.append("R3: %s -- cannot verify is not verified (rule 12)" % msg)
         table.append(("R3", "Zenodo record", "FAIL", msg))
         return table
+    # The other door is recorded on every run, and it is not asked to decide
+    # anything. `zenodo_records` read the concept; this reports what the *search*
+    # index said about the same concept, so a run where the two disagree leaves
+    # evidence instead of a puzzle. On 2026-10-10 the search door answered CI with
+    # a readable envelope holding nothing while the concept read resolved and
+    # /api/records/23260442/versions listed two published records -- and the gate
+    # believed the search.
+    searched, search_note = api.zenodo_search(facts["concept"])
+    notes.append("R3 cross-door: read=%s; search=%s"
+                 % (msg, search_note if searched is None
+                    else "%d record(s) -- %s" % (searched, search_note)))
     if not recs:
-        fails.append("R3: Zenodo holds no record at all under concept %s"
-                     % facts["concept"])
+        fails.append("R3: Zenodo holds no record at all under concept %s -- %s"
+                     % (facts["concept"], msg))
         table.append(("R3", "Zenodo record", "FAIL", "no record under the concept"))
         return table
     by_doi = {r["doi"]: r for r in recs if r.get("doi")}
@@ -859,6 +1015,10 @@ class FakeAPI(object):
         self.calls["zen"] += 1
         return (self.records, "%d record(s)" % len(self.records))
 
+    def zenodo_search(self, concept_doi):
+        self.calls["zen"] += 1
+        return (len(self.records), "HTTP 200, hits.total=%d" % len(self.records))
+
 
 def _build(root, overrides=None, drop=None):
     files = dict(GOOD)
@@ -961,6 +1121,19 @@ class _TransportAPI(RealAPI):
 def selftest():
     cases = []
 
+    def _all_in(want, text):
+        """`want_fail_text` may be one string or several; several must all appear.
+
+        A finding has to carry both its claim and the evidence for it, and pinning
+        only the claim is how "a failure for the wrong reason" stays invisible
+        (SF-012). A 404 that says "no record under the concept" proves the gate can
+        still say no; only the 404 in the same sentence proves it is saying it for
+        the right reason.
+        """
+        if isinstance(want, (list, tuple)):
+            return all(w in text for w in want)
+        return want in text
+
     def run_case(cid, what, override=None, drop=None, api=None, zenodo=True,
                  want_fail=True, expect_api_calls=None, want_nv=0,
                  want_harness_error=False, want_fail_text=None,
@@ -1008,7 +1181,7 @@ def selftest():
         text = "\n".join(fails)
         ok = ((got_fail == want_fail) and (len(nv) == want_nv)
               and (bool(harness) == want_harness_error)
-              and (want_fail_text is None or want_fail_text in text)
+              and (want_fail_text is None or _all_in(want_fail_text, text))
               and (forbid_fail_text is None or forbid_fail_text not in text))
         detail = ("as required" if ok else
                   "UNEXPECTED: fails=%d (want %s), not-verified=%d (want %d), "
@@ -1098,12 +1271,84 @@ def selftest():
                       "version 9.9.9, 2026-01-03", "version 9.9.8, 2026-01-02")},
              api=FakeAPI(), expect_api_calls={"zen": 1},
              want_fail_text="superseded archive")
-    # The transport itself, driven through the real implementation rather than
-    # through a stub that returns a canned tuple. Both cases are 2026-10-09
-    # findings: the probe asked the public records API for 100 records per page,
-    # which that API refuses, and then reported the refusal as unreachability.
-    # The first case pins the *reason*; the second pins the walk across pages.
-    run_case("R3-api-refused", "a rejected query is named, not called unreachable",
+    # --- Zenodo: a concept has two doors, and 2026-10-10 proved they differ ------
+    # A concept read answers with a *record object*, and a version family answers
+    # with an envelope -- both measured on 2026-10-10 against concept
+    # 10.5281/zenodo.23051637. These fixtures mirror those two shapes, so the cases
+    # drive the doors the code actually opens, in the order it opens them: the
+    # concept read, then the version list, then the search (reported, never
+    # decisive). Driving the real implementation rather than a stub that returns a
+    # canned tuple is the point: a stub cannot express "the search came back empty
+    # while the read did not", which is the shape of the defect.
+    def _record_obj(recid, doi, version, versions_url=None):
+        return json.dumps({
+            "id": recid, "conceptrecid": "11111110", "doi": doi,
+            "status": "published", "submitted": True,
+            "metadata": {"version": version},
+            "links": {"versions": versions_url or
+                      "https://zenodo.org/api/records/%d/versions" % recid},
+        })
+
+    def _envelope(entries, total=None, nxt=None):
+        return json.dumps({
+            "hits": {"total": len(entries) if total is None else total,
+                     "hits": entries},
+            "links": ({"next": nxt} if nxt else {})})
+
+    _v098 = {"doi": "10.5281/zenodo.11111111", "submitted": True,
+             "created": "2026-01-02T00:00:00Z", "metadata": {"version": "9.9.8"}}
+    _v099 = {"doi": "10.5281/zenodo.11111112", "submitted": True,
+             "created": "2026-01-03T00:00:00Z", "metadata": {"version": "9.9.9"}}
+    _family = _envelope([_v099, _v098])
+    _none_found = _envelope([])
+    # The 404 body, verbatim from the measurement of an id that is not there.
+    _absent = json.dumps({"status": 404,
+                          "message": "The persistent identifier does not exist."})
+
+    # The case the 2026-10-10 CI run needed. R3 asked a *search* whether Zenodo held
+    # anything; the search answered CI with a readable envelope holding nothing, and
+    # the gate printed `no record under the concept` -- a claim about Zenodo's
+    # holdings, made from an index that was silent, while the concept itself
+    # resolved and its version family listed two published records. Here the search
+    # door is empty and the read door is not, and the verdict must follow the read.
+    run_case("R3-read-not-search",
+             "an empty search is not evidence that a concept is empty (the read "
+             "decides; the search is only reported)",
+             api=_TransportAPI(outcomes=[
+                 ("page", _record_obj(11111112, "10.5281/zenodo.11111112",
+                                      "9.9.9"), 200),
+                 ("page", _family, 200),
+                 ("page", _none_found, 200)]),
+             expect_api_calls={"zen": 3}, want_fail=False,
+             forbid_fail_text="no record under the concept")
+    # The counterpart with teeth. When Zenodo itself says the identifier does not
+    # exist, the read *is* the evidence, and R3 must still be able to say no -- a
+    # fix that made "empty" unreachable would have removed the gate's ability to
+    # catch a deposit that gets deleted. Both halves are pinned: the claim, and the
+    # 404 that justifies it.
+    run_case("R3-concept-absent",
+             "the concept read 404s, so the empty verdict is evidence-backed and "
+             "the gate keeps its ability to say no",
+             api=_TransportAPI(outcomes=[
+                 ("reject", 404, _absent),
+                 ("page", _none_found, 200)]),
+             expect_api_calls={"zen": 2},
+             want_fail_text=("no record at all under concept", "HTTP 404"))
+    # And the same status answered by something that is not Zenodo. A 404 the probe
+    # cannot read is a probe failure, not a deleted deposit -- the same distinction
+    # as everywhere else in this file, at the one status where it is easiest to get
+    # wrong, because 404 is the status a gate most wants to believe.
+    run_case("R3-404-unreadable",
+             "a 404 that is not Zenodo's own error body is read as a probe that "
+             "cannot read, not a concept that is absent",
+             api=_TransportAPI(outcomes=[
+                 ("reject", 404, "<html><body>blocked by something in front</body>"
+                                 "</html>"),
+                 ("page", _none_found, 200)]),
+             expect_api_calls={"zen": 1},
+             want_fail_text=("cannot verify", "not with Zenodo's own error body"),
+             forbid_fail_text="no record under the concept")
+    run_case("R3-api-refused", "a rejected request is named, not called unreachable",
              api=_TransportAPI(reject=(400, json.dumps({
                  "status": 400, "message": "A validation error occurred.",
                  "errors": [{"field": "size", "messages": [
@@ -1114,46 +1359,59 @@ def selftest():
              forbid_fail_text="unreachable")
     # The 2026-10-09 remote run printed `R3 FAIL  no record under the concept`
     # against a concept that Zenodo's own API returns two published records for.
-    # The query had not been refused and the network was up: the body simply was
-    # not the search envelope this code assumes, and
-    # `((data or {}).get("hits") or {}).get("hits") or []` turned an unreadable
-    # page into an empty result -- the absence of a *field* recorded as the
-    # absence of *records*. That is this catalogue's own subject matter, found in
-    # this catalogue's own gate. The case pins the distinction the fix depends
-    # on: a 200 we cannot read must never be reported as a concept with nothing
-    # under it.
-    run_case("R3-envelope-shape", "a 200 that is not a records envelope is not "
-             "reported as an empty concept",
-             api=_TransportAPI(pages=[(json.dumps({
-                 "status": 200, "message": "shape this gate does not know"}), 200)]),
+    # The query had not been refused and the network was up: the body simply was not
+    # the shape this code assumes, and a chain of `.get(...)` calls turned an
+    # unreadable page into an empty result -- the absence of a *field* recorded as
+    # the absence of *records*. That is this catalogue's own subject matter, found in
+    # this catalogue's own gate. The next two cases pin the distinction the fix
+    # depends on at each door: a 200 we cannot read must never be reported as a
+    # concept with nothing under it.
+    run_case("R3-concept-shape", "a 200 at the concept door that is not a record "
+             "object is not reported as an empty concept",
+             api=_TransportAPI(outcomes=[
+                 ("page", json.dumps({
+                     "status": 200, "message": "shape this gate does not know"}), 200),
+                 ("page", _none_found, 200)]),
              expect_api_calls={"zen": 1},
+             want_fail_text="not with a record object",
+             forbid_fail_text="no record under the concept")
+    run_case("R3-versions-shape", "a 200 at the version door that is not a records "
+             "envelope is not reported as an empty concept",
+             api=_TransportAPI(outcomes=[
+                 ("page", _record_obj(11111112, "10.5281/zenodo.11111112",
+                                      "9.9.9"), 200),
+                 ("page", json.dumps({
+                     "status": 200, "message": "shape this gate does not know"}), 200),
+                 ("page", _none_found, 200)]),
+             expect_api_calls={"zen": 2},
              want_fail_text="not with a records envelope",
              forbid_fail_text="no record under the concept")
     # The counterpart, so the fix cannot pass by refusing to ever call a concept
-    # empty: a well-formed envelope that really holds nothing must still be named
-    # as an empty concept.
-    run_case("R3-genuinely-empty", "a real empty envelope is still named an empty "
-             "concept (the shape check must not over-correct)",
-             api=_TransportAPI(pages=[(json.dumps({
-                 "hits": {"total": 0, "hits": []}, "links": {}}), 200)]),
-             expect_api_calls={"zen": 1},
+    # empty: the read resolves, the version family is a real empty envelope, and that
+    # must still be named as an empty concept.
+    run_case("R3-family-empty", "the read resolves and the version family really is "
+             "empty -- still named an empty concept (the shape check must not "
+             "over-correct)",
+             api=_TransportAPI(outcomes=[
+                 ("page", _record_obj(11111112, "10.5281/zenodo.11111112",
+                                      "9.9.9"), 200),
+                 ("page", _none_found, 200),
+                 ("page", _none_found, 200)]),
+             expect_api_calls={"zen": 3},
              want_fail_text="no record at all under concept")
     # A transient upstream must not be reported as repository drift. The first case
-    # feeds a 504 and then a good page: before the retry existed, the first 504 was
-    # the verdict. The second feeds a gateway that never recovers: the retry must
-    # not become an exemption, and the finding has to say what it took.
+    # feeds a 504 and then a good answer: before the retry existed, the first 504 was
+    # the verdict. The second feeds a gateway that never recovers: the retry must not
+    # become an exemption, and the finding has to say what it took.
     run_case("R3-retry-recovers", "a gateway timeout is retried rather than reported "
              "(the first answer was about the gateway, the second about the concept)",
              api=_TransportAPI(outcomes=[
                  ("reject", 504, "<html>504 Gateway Time-out</html>"),
-                 ("page", json.dumps({"hits": {"total": 2, "hits": [
-                     {"doi": "10.5281/zenodo.11111111", "submitted": True,
-                      "created": "2026-01-02T00:00:00Z",
-                      "metadata": {"version": "9.9.8"}},
-                     {"doi": "10.5281/zenodo.11111112", "submitted": True,
-                      "created": "2026-01-03T00:00:00Z",
-                      "metadata": {"version": "9.9.9"}}]}, "links": {}}), 200)]),
-             expect_api_calls={"zen": 2}, want_fail=False)
+                 ("page", _record_obj(11111112, "10.5281/zenodo.11111112",
+                                      "9.9.9"), 200),
+                 ("page", _family, 200),
+                 ("page", _family, 200)]),
+             expect_api_calls={"zen": 4}, want_fail=False)
     run_case("R3-retry-exhausted", "a gateway that never recovers still fails, and the "
              "finding states how many attempts were made",
              api=_TransportAPI(outcomes=[
@@ -1163,18 +1421,17 @@ def selftest():
     _filler = [{"id": 11110200 + i, "doi": "10.5281/zenodo.%d" % (11110200 + i),
                 "submitted": True, "created": "2025-01-01T00:00:00Z",
                 "metadata": {"version": "9.8.%d" % i}} for i in range(25)]
-    _tail = [{"id": 11111111, "doi": "10.5281/zenodo.11111111", "submitted": True,
-              "created": "2026-01-02T00:00:00Z", "metadata": {"version": "9.9.8"}},
-             {"id": 11111112, "doi": "10.5281/zenodo.11111112", "submitted": True,
-              "created": "2026-01-03T00:00:00Z", "metadata": {"version": "9.9.9"}}]
     run_case("R3-paginated", "a concept with more versions than fit on one page",
-             api=_TransportAPI(pages=[
-                 (json.dumps({"hits": {"total": 27, "hits": _filler},
-                              "links": {"next":
-                                        "https://zenodo.org/api/records?page=2"}}), 200),
-                 (json.dumps({"hits": {"total": 27, "hits": _tail},
-                              "links": {}}), 200)]),
-             expect_api_calls={"zen": 2}, want_fail=False)
+             api=_TransportAPI(outcomes=[
+                 ("page", _record_obj(11111112, "10.5281/zenodo.11111112",
+                                      "9.9.9"), 200),
+                 ("page", _envelope(
+                     _filler, total=27,
+                     nxt="https://zenodo.org/api/records/11111112/versions?page=2"),
+                  200),
+                 ("page", _envelope([_v098, _v099], total=27), 200),
+                 ("page", _envelope([_v098, _v099], total=27), 200)]),
+             expect_api_calls={"zen": 4}, want_fail=False)
     run_case("R4-unprotected", "main is not protected",
              api=FakeAPI(protected=False), expect_api_calls={"gh": 1})
     run_case("R5-dead-required-check", "a required check no job reports",
