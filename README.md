@@ -54,6 +54,8 @@
 > **Runnable example.** The T08 walkthrough (UC-21 S5-Q2 via the SF-006 control) now runs as a stateful simulation with a selftest that asserts the two traces discriminate: [`examples/T08-S5Q2/`](examples/T08-S5Q2/README.md).
 >
 > **Gate-register crosswalk.** The UC-21 scenario's own Q0-Q6 register (Annex S5 sections 7-10) now runs as an executable crosswalk to that four-case matrix, reproducing the published capability-absent and ineffective-control traces and killing four gate-layer mutants: [`examples/S5-Qregister/`](examples/S5-Qregister/README.md).
+>
+> **Clinical-delegation transfer proof.** The same fail-closed authority-preservation gate, ported to a high-stakes clinical-delegation context where authority is laundered across a context handoff; a selftest asserts four mutant-kills and a negative-control: [`examples/clinical-handoff/`](examples/clinical-handoff/README.md). *(On `main`; postdates the immutable `v0.1.2` tag, so it is not present in that tag's tree.)*
 
 ---
 
