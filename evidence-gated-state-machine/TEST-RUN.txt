@@ -1,0 +1,21 @@
+﻿=== RUN 1: evidence_gated_state_machine.py ===
+== evidence_gated_state_machine - self-check ==
+  [PASS] entity registration spine: 4 entities registered, chain verifiable
+  [PASS] evidence-gated transition (model update, evidence met): GRANTED
+  [PASS] evidence-gated transition (tool change, evidence unmet): DENIED + receipt recorded
+  [PASS] capability expansion without human authorization: DENIED
+  [PASS] capability expansion with human authorization: GRANTED (authority != capability)
+  [PASS] silent-failure detectors: population drift / expired input / path deviation all fire
+  [PASS] return-to-service: granted only through a new evidence-carrying transition
+== audit trail: 5 receipts, chain depth 5
+== RESULT: all self-checks passed (constructs behave as proposed)
+
+exit code = 0
+
+=== RUN 2: demo_tamper_check.py ===
+== negative control: tamper detection (QC-07) ==
+  [PASS] baseline chain verifies True after registration
+  [PASS] tampered version field detected: verify_chain() = False
+== RESULT: negative control passed (tampering is detected) ==
+
+exit code = 0
