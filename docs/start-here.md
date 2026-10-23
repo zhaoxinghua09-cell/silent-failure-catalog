@@ -26,6 +26,7 @@ Find your symptom in the left column. The right column is the entry that answers
 | A failure is reported, but blamed on the wrong cause | [SF-012 · Misattributed failure](../failures/SF-012-misattributed-failure.md) |
 | The check ran against a stale copy of the thing it was checking | [SF-013 · Stale copy contaminates the check](../failures/SF-013-stale-copy-contaminates-check.md) |
 | The process is alive and doing nothing | [SF-014 · Zombie process looks alive](../failures/SF-014-zombie-process-looks-alive.md) |
+| The citation asserts a state that later flipped | [SF-015 · Stale reference: cited state rots](../failures/SF-015-stale-reference-rot.md) |
 
 Nothing matches? That is a gap in this catalog, and a gap is worth reporting — see [`docs/take-the-challenge.md`](take-the-challenge.md) § Tier 1.
 
