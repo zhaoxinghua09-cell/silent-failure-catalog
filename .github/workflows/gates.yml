@@ -68,7 +68,7 @@ concurrency:
 jobs:
   gates:
     name: gates · python ${{ matrix.python }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # pinned: Python 3.9 has no ubuntu-24.04 build (host image migrated); see PR #25
     # `gh` is preinstalled on the runner but unauthenticated unless a token is handed
     # to it. Gate 6 resolves the tag object through the API, so this token is part of
     # whether the gate can run at all (defect 3 above).
@@ -159,7 +159,7 @@ jobs:
     # report. That is this catalogue's own subject, so it is written down — if this name
     # ever has to change, the branch-protection rule changes in the same move.
     name: negative control · the manifest gate must be able to fail
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # pinned: Python 3.9 has no ubuntu-24.04 build (host image migrated); see PR #25
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
