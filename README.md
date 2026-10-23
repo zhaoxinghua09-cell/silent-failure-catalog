@@ -8,7 +8,7 @@
 
 [![License: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE)
 [![Content: All Rights Reserved](https://img.shields.io/badge/content-All%20Rights%20Reserved-lightgrey.svg)](LICENSE-CONTENT)
-[![Entries](https://img.shields.io/badge/entries-14-14B8A6)](failures/)
+[![Entries](https://img.shields.io/badge/entries-15-14B8A6)](failures/)
 [![Zero dependency](https://img.shields.io/badge/deps-stdlib%20only-0B1F3A)](#quick-start)
 <!-- The gate runs in CI now, so the badge below can point at a run that exists.
      It was withheld until it did: a badge claiming a validation run that does not
