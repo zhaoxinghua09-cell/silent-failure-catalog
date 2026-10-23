@@ -76,6 +76,7 @@ The failure lives outside the logic.
 
 - [SF-013 — Stale copy contaminates the check](failures/SF-013-stale-copy-contaminates-check.md)
 - [SF-014 — Zombie process looks alive](failures/SF-014-zombie-process-looks-alive.md)
+- [SF-015 — Stale reference: cited state rots](failures/SF-015-stale-reference-rot.md)
 
 ## Tools
 
