@@ -104,7 +104,7 @@ python tools/gate-lint.py --selftest      # proves the linter itself works
 | **B · Uncounted Absence** | Something required is missing, and missing does not count as failure | [SF-005](failures/SF-005-neutral-marker-not-counted.md) · [SF-006](failures/SF-006-undeclared-not-checked.md) · [SF-007](failures/SF-007-empty-value-is-silent.md) |
 | **C · Wrong Evidence** | The signal used cannot prove the conclusion drawn from it | [SF-008](failures/SF-008-loading-artifact-as-evidence.md) · [SF-009](failures/SF-009-exposure-counted-as-usage.md) · [SF-010](failures/SF-010-local-green-not-remote-green.md) |
 | **D · Drifting Oracle** | The check itself degrades — exemption, substring match, mis-attribution | [SF-011](failures/SF-011-always-green-oracle.md) · [SF-012](failures/SF-012-misattributed-failure.md) |
-| **E · Process & Environment** | The failure lives outside the logic: stale artifacts, zombie processes | [SF-013](failures/SF-013-stale-copy-contaminates-check.md) · [SF-014](failures/SF-014-zombie-process-looks-alive.md) |
+| **E · Process & Environment** | The failure lives outside the logic: stale artifacts, zombie processes | [SF-013](failures/SF-013-stale-copy-contaminates-check.md) · [SF-014](failures/SF-014-zombie-process-looks-alive.md) · [SF-015](failures/SF-015-stale-reference-rot.md) — stale reference: citations rot when the cited state moves |
 
 → Full taxonomy with the shared root cause: [`docs/taxonomy.md`](docs/taxonomy.md)
 
