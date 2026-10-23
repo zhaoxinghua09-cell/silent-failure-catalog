@@ -7,17 +7,17 @@ Last updated: 2026-10-11. Cite entries with their `as of` date.
 
 ## Start here
 
-- [README](README.md): what a silent failure is, the shared root cause, quick start
-- [Start here](docs/start-here.md): **symptom → entry, in one table** — the fastest route from what an operator is seeing to the answer
-- [Where to find us](docs/where-to-find-us.md): citation rules, every channel, and what this project declines to do
-- [Take the challenge](docs/take-the-challenge.md): three tiers, from a 5-minute report to breaking the linter itself
-- [Taxonomy](docs/taxonomy.md): the five families and why they are one bug at five layers
-- [Question Map](docs/question-map.md): the questions this catalog answers, at four levels of search intent
-- [Building this catalog](docs/building-this-catalog.md): the ten defects found in this repository's own tooling while building it, and the controls that found them
-- [Catalog index](failures/README.md): all entries in one table
-- [Contributing](CONTRIBUTING.md): entry requirements, de-identification rules
-- [Support](SUPPORT.md): what to include in a report, and what this project does not offer
-- [Security](SECURITY.md): what counts as a defect in a repository that ships no service
+- [README](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/README.md): what a silent failure is, the shared root cause, quick start
+- [Start here](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/docs/start-here.md): **symptom → entry, in one table** — the fastest route from what an operator is seeing to the answer
+- [Where to find us](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/docs/where-to-find-us.md): citation rules, every channel, and what this project declines to do
+- [Take the challenge](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/docs/take-the-challenge.md): three tiers, from a 5-minute report to breaking the linter itself
+- [Taxonomy](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/docs/taxonomy.md): the five families and why they are one bug at five layers
+- [Question Map](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/docs/question-map.md): the questions this catalog answers, at four levels of search intent
+- [Building this catalog](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/docs/building-this-catalog.md): the ten defects found in this repository's own tooling while building it, and the controls that found them
+- [Catalog index](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/README.md): all entries in one table
+- [Contributing](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/CONTRIBUTING.md): entry requirements, de-identification rules
+- [Support](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/SUPPORT.md): what to include in a report, and what this project does not offer
+- [Security](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/SECURITY.md): what counts as a defect in a repository that ships no service
 
 ## For AI assistants and retrieval systems
 
@@ -42,54 +42,54 @@ The absence of evidence is recorded as evidence of absence of a problem. Two mec
 
 The check runs, but has no discriminating power.
 
-- [SF-001 — Zero items collected, exit 0](failures/SF-001-zero-items-pass.md): the test command ran and collected nothing; a green suite that never ran
-- [SF-002 — Early return as an implicit skip](failures/SF-002-early-return-as-skip.md): the guard exits the test body instead of reporting a skip
-- [SF-003 — Swallowed exception](failures/SF-003-swallowed-exception.md): try/except added "for robustness" removes the failure signal
-- [SF-004 — Sentinel value on failure](failures/SF-004-sentinel-value.md): errors returned as 0.0 / "" / [] so a bug looks like a bad result
+- [SF-001 — Zero items collected, exit 0](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-001-zero-items-pass.md): the test command ran and collected nothing; a green suite that never ran
+- [SF-002 — Early return as an implicit skip](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-002-early-return-as-skip.md): the guard exits the test body instead of reporting a skip
+- [SF-003 — Swallowed exception](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-003-swallowed-exception.md): try/except added "for robustness" removes the failure signal
+- [SF-004 — Sentinel value on failure](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-004-sentinel-value.md): errors returned as 0.0 / "" / [] so a bug looks like a bad result
 
 ## Family B · Uncounted Absence
 
 Something required is missing, and missing does not count as failure.
 
-- [SF-005 — Neutral marker not counted](failures/SF-005-neutral-marker-not-counted.md): the "expected but absent" case is reported as a neutral note, so it never increments the failure counter
-- [SF-006 — Undeclared means unchecked](failures/SF-006-undeclared-not-checked.md): the validator only verifies declared items, so a missing declaration is invisible
-- [SF-007 — Empty value is silent](failures/SF-007-empty-value-is-silent.md): an empty required field breaks nothing observably
+- [SF-005 — Neutral marker not counted](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-005-neutral-marker-not-counted.md): the "expected but absent" case is reported as a neutral note, so it never increments the failure counter
+- [SF-006 — Undeclared means unchecked](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-006-undeclared-not-checked.md): the validator only verifies declared items, so a missing declaration is invisible
+- [SF-007 — Empty value is silent](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-007-empty-value-is-silent.md): an empty required field breaks nothing observably
 
 ## Family C · Wrong Evidence
 
 The signal used cannot prove the conclusion drawn from it.
 
-- [SF-008 — Loading artifact as evidence of use](failures/SF-008-loading-artifact-as-evidence.md)
-- [SF-009 — Exposure counted as usage](failures/SF-009-exposure-counted-as-usage.md)
-- [SF-010 — Local green is not remote green](failures/SF-010-local-green-not-remote-green.md)
+- [SF-008 — Loading artifact as evidence of use](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-008-loading-artifact-as-evidence.md)
+- [SF-009 — Exposure counted as usage](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-009-exposure-counted-as-usage.md)
+- [SF-010 — Local green is not remote green](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-010-local-green-not-remote-green.md)
 
 ## Family D · Drifting Oracle
 
 The check itself degrades.
 
-- [SF-011 — The always-green oracle](failures/SF-011-always-green-oracle.md): an exemption clause that fires on any match makes the check unconditionally pass
-- [SF-012 — Misattributed failure](failures/SF-012-misattributed-failure.md): a failure is reported, but attributed to the wrong cause
+- [SF-011 — The always-green oracle](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-011-always-green-oracle.md): an exemption clause that fires on any match makes the check unconditionally pass
+- [SF-012 — Misattributed failure](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-012-misattributed-failure.md): a failure is reported, but attributed to the wrong cause
 
 ## Family E · Process & Environment
 
 The failure lives outside the logic.
 
-- [SF-013 — Stale copy contaminates the check](failures/SF-013-stale-copy-contaminates-check.md)
-- [SF-014 — Zombie process looks alive](failures/SF-014-zombie-process-looks-alive.md)
-- [SF-015 — Stale reference: cited state rots](failures/SF-015-stale-reference-rot.md)
+- [SF-013 — Stale copy contaminates the check](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-013-stale-copy-contaminates-check.md)
+- [SF-014 — Zombie process looks alive](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-014-zombie-process-looks-alive.md)
+- [SF-015 — Stale reference: cited state rots](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-015-stale-reference-rot.md)
 
 ## Tools
 
-- [tools/gate-lint.py](tools/gate-lint.py): lint a gate/validator/audit script for silent-pass patterns
-- [tools/check-catalog.py](tools/check-catalog.py): validate this catalog's internal consistency
-- [tools/make-manifest.py](tools/make-manifest.py): content integrity — per-file SHA-256 plus one set digest; `--check` verifies a checkout
-- [INTEGRITY.md](INTEGRITY.md): the recorded digests, and what they do and do not prove
-- [failures/TEMPLATE.md](failures/TEMPLATE.md): entry template
+- [tools/gate-lint.py](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/tools/gate-lint.py): lint a gate/validator/audit script for silent-pass patterns
+- [tools/check-catalog.py](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/tools/check-catalog.py): validate this catalog's internal consistency
+- [tools/make-manifest.py](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/tools/make-manifest.py): content integrity — per-file SHA-256 plus one set digest; `--check` verifies a checkout
+- [INTEGRITY.md](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/INTEGRITY.md): the recorded digests, and what they do and do not prove
+- [failures/TEMPLATE.md](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/TEMPLATE.md): entry template
 
 ## Optional
 
-- [CHANGELOG.md](CHANGELOG.md)
-- [CITATION.cff](CITATION.cff)
+- [CHANGELOG.md](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/CHANGELOG.md)
+- [CITATION.cff](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/CITATION.cff)
 
 ## Note for retrieval systems
 
