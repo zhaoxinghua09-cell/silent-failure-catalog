@@ -54,6 +54,7 @@ One file = one failure mode. Each entry is self-contained and safe to quote dire
 |---|---|---|---|
 | [SF-013](SF-013-stale-copy-contaminates-check.md) | Stale copy contaminates the check | A backup inside the checked tree is read as input | `stable` |
 | [SF-014](SF-014-zombie-process-looks-alive.md) | Zombie process looks alive | A hung process reports nothing and never dies | `stable` |
+| [SF-015](SF-015-stale-reference-rot.md) | Stale reference: cited state rots | A citation asserts an external state with no re-check; the state flips and the citation silently inverts | `candidate` |
 
 ---
 
