@@ -166,6 +166,13 @@ cd tools/samples/bad
 python ../../gate-lint.py . --tree .
 ```
 
+> **Why `cd` first** — `tools/samples/` is deliberately skipped by the directory
+> walk (they are intentional fixtures, and linting them is meaningless). Running
+> `python tools/gate-lint.py tools/samples/bad` from the repo root therefore
+> reports "nothing was linted" and exits 1 — that is the fail-closed behaviour,
+> not a bug. Change into the directory first, as above, so `.` is not under
+> `samples/`, and the fixtures are linted.
+
 ```
 counter_unused.py
   🔴 SFL-001  no-nonzero-exit              cannot fail: no exit()/raise/assert anywhere in this file
