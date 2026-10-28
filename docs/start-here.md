@@ -37,6 +37,7 @@ Nothing matches? That is a gap in this catalog, and a gap is worth reporting —
 | To know whether one of your own scripts can pass without checking anything | `python tools/gate-lint.py your_gate.py` |
 | To know whether `gate-lint` itself still works | `python tools/gate-lint.py --selftest` |
 | To verify you hold an unmodified copy of this catalog | `python tools/make-manifest.py --check` |
+| To see a runnable reference implementation of evidence-gated lifecycle governance, and the gate that executes it | [`evidence-gated-state-machine/`](../evidence-gated-state-machine/README.md) — limits declared, not implied |
 | To see every pattern in one table | [`failures/README.md`](../failures/README.md) |
 
 ## What this catalog is not
@@ -56,7 +57,7 @@ Nothing matches? That is a gap in this catalog, and a gap is worth reporting —
 > **2. No negative control means no evidence.**
 > A check that has never been observed failing has not been shown to be capable of failing.
 
-Every one of the fourteen entries above is these two rules, applied at a different layer.
+Every one of the fifteen entries above is these two rules, applied at a different layer.
 
 ## Who maintains this, and what else is published
 

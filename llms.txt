@@ -1,6 +1,6 @@
 # Silent Failure Catalog
 
-> A catalog of validation that passes while nothing is being checked — silent failure modes in CI gates, test suites, data pipelines and AI-agent harnesses, each with a minimal reproduction, a self-check and a fix that carries a negative control. Fourteen entries across five families; one file per failure mode.
+> A catalog of validation that passes while nothing is being checked — silent failure modes in CI gates, test suites, data pipelines and AI-agent harnesses, each with a minimal reproduction, a self-check and a fix that carries a negative control. Fifteen entries across five families; one file per failure mode.
 
 Maintainer: Zhao, Xinghua (SynomosAI). License: MIT (code) / all rights reserved (content) — citation with attribution permitted.
 Last updated: 2026-10-11. Cite entries with their `as of` date.
@@ -15,6 +15,7 @@ Last updated: 2026-10-11. Cite entries with their `as of` date.
 - [Question Map](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/docs/question-map.md): the questions this catalog answers, at four levels of search intent
 - [Building this catalog](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/docs/building-this-catalog.md): the ten defects found in this repository's own tooling while building it, and the controls that found them
 - [Catalog index](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/README.md): all entries in one table
+- [Reference implementation](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/evidence-gated-state-machine/README.md): a dependency-free state machine for evidence-gated lifecycle governance — demonstration of expressibility, with its measured limits declared and the gate that executes it named
 - [Contributing](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/CONTRIBUTING.md): entry requirements, de-identification rules
 - [Support](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/SUPPORT.md): what to include in a report, and what this project does not offer
 - [Security](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/SECURITY.md): what counts as a defect in a repository that ships no service

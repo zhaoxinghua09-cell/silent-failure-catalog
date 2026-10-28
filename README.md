@@ -1,4 +1,4 @@
-Silent failures are what the LGD Three Laws （有籍·有证·有门禁 / registered · evidenced · gated) are built to catch — portal: https://zhaoxinghua09-cell.github.io/lgd-hub/
+Silent failures are what the LGD Three Laws （有籍·有证·有门禁 / registered · evidenced · gated) are built to catch — for where this catalog sits among the projects, and how to arrive at it from any of them, see [`docs/start-here.md`](docs/start-here.md) and [`docs/where-to-find-us.md`](docs/where-to-find-us.md).
 
 <div align="center">
 
@@ -58,6 +58,8 @@ Silent failures are what the LGD Three Laws （有籍·有证·有门禁 / regis
 > **Gate-register crosswalk.** The UC-21 scenario's own Q0-Q6 register (Annex S5 sections 7-10) now runs as an executable crosswalk to that four-case matrix, reproducing the published capability-absent and ineffective-control traces and killing four gate-layer mutants: [`examples/S5-Qregister/`](examples/S5-Qregister/README.md).
 >
 > **Clinical-delegation transfer proof.** The same fail-closed authority-preservation gate, ported to a high-stakes clinical-delegation context where authority is laundered across a context handoff; a selftest asserts four mutant-kills and a negative-control: [`examples/clinical-handoff/`](examples/clinical-handoff/README.md). *(Included in the immutable release tag `v0.1.3`.)*
+>
+> **Reference implementation.** A dependency-free state machine for evidence-gated lifecycle governance — entity registry spine with a hash-chained audit trail, transitions that are invalid (not merely discouraged) when their evidence is unmet, named silent-failure detectors, and human-authorized capability expansion: [`evidence-gated-state-machine/`](evidence-gated-state-machine/README.md). It is a demonstration of expressibility, not a security product, and it declares its own measured limits in [`Known limits`](evidence-gated-state-machine/README.md#known-limits-measured-not-asserted) rather than leaving them to be found. This folder is also the artifact that gate 18 (`tools/state-machine-negative-control.py`) exists for: before that gate was added, every check in this repository could be green while the verifier inside it had been hollowed out — the measurement and the fix are recorded in [`VERIFICATION.md`](evidence-gated-state-machine/VERIFICATION.md). *(Not part of the immutable release tag `v0.1.3`.)*
 
 ---
 

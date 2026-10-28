@@ -2,7 +2,7 @@
 
 **Validation that passes while nothing is being checked.**
 
-A catalog of fourteen named silent-failure modes across CI gates, test suites, data pipelines
+A catalog of fifteen named silent-failure modes across CI gates, test suites, data pipelines
 and AI-agent harnesses — each with a minimal reproduction, a self-check, a fix, and a negative
 control.
 
@@ -12,7 +12,7 @@ control.
 |---|---|
 | [Start here](docs/start-here.md) | symptom → entry, in one table |
 | [Taxonomy](docs/taxonomy.md) | the five families, and the shared root cause |
-| [The 14 entries](failures/README.md) | one file each, each with a reproduction and a negative control |
+| [The 15 entries](failures/README.md) | one file each, each with a reproduction and a negative control |
 | [Question map](docs/question-map.md) | four levels of search intent, with citable answers |
 | [Take the challenge](docs/take-the-challenge.md) | three tiers, up to *break our linter* |
 | [Building this catalog](docs/building-this-catalog.md) | the eleven defects found in our own tooling while building it |

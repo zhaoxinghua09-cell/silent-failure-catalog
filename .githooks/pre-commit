@@ -28,6 +28,25 @@
 #      written copy of these steps; the block there is generated from this file
 #      and gate 15 fails if the two disagree (see the 2026-10-08 entry below).
 #
+# 2026-10-28: gate 18 joins -- tools/state-machine-negative-control.py.
+#   An independent review seat asked whether any of the seventeen gates ever
+#   EXECUTES `evidence-gated-state-machine/`. Measured answer: no. A static
+#   search for the module name across every gate returned zero hits, a marker
+#   side effect planted in the implementation was seen by none of the fifteen
+#   non-byte gates, and the gate whose name suggests otherwise (13,
+#   impl-mutation.py) targets examples/S5-Qregister/implementation.py.
+#   The cost was demonstrated on this very list, at 17/17 green: Registry.
+#   verify_chain() -- the whole basis of "the audit chain is verifiable" -- was
+#   replaced with an unconditional `return True` and this hook still printed
+#   `all gates passed`, while the repository's own negative control
+#   (demo_tamper_check.py) failed on the same tree. A change that hollows out a
+#   verifier could therefore be merged through the legal flow in silence, which
+#   is this catalog's subject one level up.
+#   Gate 18 runs the artifact, requires its negative control to bite, kills two
+#   mutations in a throw-away copy (one of them the exact 2026-10-28 edit),
+#   requires the restored copy to pass again, and PRINTS the three vectors it
+#   does not cover instead of implying coverage. Its `--selftest` shows the gate
+#   itself goes red on a hollowed artifact.
 # 2026-10-09: gate 17 joins -- tools/verify_release_face.py. Gate 6 compares one
 #   sentence in README against one sentence in INTEGRITY and nothing else; it has
 #   no opinion about .zenodo.json, CITATION.cff, llms.txt or
@@ -156,6 +175,14 @@ run() {
         echo "pre-commit: FAIL — $name" >&2
         printf '%s\n' "$out" | sed 's/^/    /' >&2
         fail=1
+    else
+        # A silent success is this repository's own subject: "the run where you
+        # forgot looks exactly like the run where everything passed". The hook
+        # used to print one line for eighteen gates, so "18 passed" could not be
+        # read off the output -- an independent seat asked in as many words
+        # whether the count was verifiable, and it was not. One line per gate
+        # costs nothing and makes the count a thing you can see.
+        echo "  PASS  $name"
     fi
 }
 
@@ -184,6 +211,7 @@ run "line endings"                "the index carries no CRLF" tools/check-line-e
 run "gate parity selftest"        "that gate must be able to fail too" tools/check-gate-parity.py --selftest
 run "gate parity hook-vs-ci"      "the hook and this file run the same gates" tools/check-gate-parity.py
 run "prepare selftest"            "the ordering and its limits must be able to fail" tools/prepare.py --selftest
+run "state-machine negative control" "the artifact under test must be executed, and its control must bite" tools/state-machine-negative-control.py
 
 if [ "$fail" -ne 0 ]; then
     echo "" >&2

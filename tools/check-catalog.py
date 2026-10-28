@@ -22,6 +22,10 @@ Checks performed
    entry pages — see `check_promo_links`, and `--selftest` for its sample pair
 9. (optional, `--scan-leaks`) heuristic de-identification scan
 10. (optional, `--selftest`) the link-discipline rule proves it can fire and can stay quiet
+11. a stated entry count in `failures/README.md` equals the number of entries on disk —
+    both directions asserted in `--selftest` (added 2026-10-28; measured defect: SF-015
+    was linked and listed while the header still said "14 entries", and no gate read
+    the number)
 
 Version note (2026-09-19): the index check originally used `if eid in text`, a
 substring test that stayed satisfied even after an entry's link was mangled —
@@ -219,6 +223,26 @@ def selftest() -> int:
     else:
         print("  ok   sample pair: %d of %d cases fire" % (fired, len(SELFTEST_CASES)))
 
+    # Count control (2026-10-28). The same shape one level up: an index that
+    # links every entry correctly and states, one line above the table, a count
+    # that nothing reads. Both directions are asserted — a rule that always fires
+    # is as useless as one that never does — and the third case pins the boundary
+    # that matters for compatibility: a page that states no count must stay quiet
+    # rather than be forced to invent one.
+    count_cases = (
+        ("count matches the set", "**15 entries** · as of 2026-10-23", 15, False),
+        ("count too low", "**14 entries** · as of 2026-09-19", 15, True),
+        ("count too high", "**16 entries** · as of 2026-10-23", 15, True),
+        ("no count stated", "One file = one failure mode.", 15, False),
+    )
+    for name, text, actual, expected in count_cases:
+        got = stated_count_mismatch(text, actual) is not None
+        ok = got == expected
+        print("  %-4s %-32s fired=%-5s expected=%s"
+              % ("ok" if ok else "FAIL", name, got, expected))
+        if not ok:
+            bad += 1
+
     print()
     if bad:
         print("  %d selftest failure(s). The rule is not trustworthy." % bad)
@@ -313,6 +337,35 @@ def check_indexes(store: Problems, ids: "set[str]", entries: "list[Path]"):
         for eid in sorted(ids):
             if not re.search(r"\b%s\b(?!-)" % re.escape(eid), text):
                 store.add(target, "does not list %s" % eid)
+
+        # A stated count is a claim about the whole set, and it drifts the moment
+        # an entry is added. Measured 2026-10-28: SF-015 was listed in this very
+        # index -- file linked, id present, every gate green -- while the header
+        # one line above the table still said "14 entries". Adding an entry is a
+        # two-line edit and only one of the lines was ever checked, so the number
+        # was free to be wrong forever. A count no check reads is a count that is
+        # wrong eventually; this makes the two lines move together.
+        if target == "failures/README.md":
+            mismatch = stated_count_mismatch(text, len(entries))
+            if mismatch:
+                store.add(target, "header claims %d entries but the directory holds %d"
+                                   % mismatch)
+
+
+def stated_count_mismatch(text: str, actual: int):
+    """Return (claimed, actual) when a header count contradicts the set, else None.
+
+    Split out of `check_indexes` so that `--selftest` can exercise both
+    directions: a claim that agrees must stay quiet, and a claim that does not
+    must fire. A count rule with only the firing direction asserted would be
+    satisfied by a rule that always fires. Enforced only where the header makes
+    the claim, so a catalog that states no count is not forced to invent one.
+    """
+    m = re.search(r"\*\*(\d+)\s+entries\*\*", text)
+    if not m:
+        return None
+    claimed = int(m.group(1))
+    return (claimed, actual) if claimed != actual else None
 
 
 def check_links(store: Problems, files: "list[Path]"):

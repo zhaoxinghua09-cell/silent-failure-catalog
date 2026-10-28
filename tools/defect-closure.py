@@ -351,7 +351,12 @@ def main():
     by_class, by_escape = summarise(ledger)
     entries = ledger.get("entries", []) if isinstance(ledger, dict) else []
 
-    print("= defect-closure (gate 10) . %s" % args.ledger)
+    # No gate number here on purpose (2026-10-28). It said "gate 10" while the
+    # gate list had already moved this script to 11, and a stale number is a
+    # second source of truth about ordering -- the ordering already has one,
+    # tools/check-gate-parity.py. Same treatment as check-line-endings.py, which
+    # claimed 13 after it had become 14. An independent seat found both.
+    print("= defect-closure . %s" % args.ledger)
     print("  entries        : %d" % len(entries))
     print("  by class       : %s" % _fmt(by_class))
     print("  by escape cause: %s" % _fmt(by_escape))
