@@ -1,4 +1,4 @@
-Silent failures are what the LGD Three Laws （有籍·有证·有门禁 / registered · evidenced · gated) are built to catch — portal: https://zhaoxinghua09-cell.github.io/lgd-hub/
+Silent failures are what the LGD Three Laws （有籍·有证·有门禁 / registered · evidenced · gated) are built to catch — portal: docs/start-here.md
 
 <div align="center">
 

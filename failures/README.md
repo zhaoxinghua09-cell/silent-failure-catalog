@@ -1,6 +1,6 @@
 # Catalog Index
 
-**14 entries** · **as of 2026-09-19** · Status legend: `stable` · `draft` · `deprecated`
+**15 entries** · **as of 2026-09-19** · Status legend: `stable` · `draft` · `deprecated`
 
 One file = one failure mode. Each entry is self-contained and safe to quote directly.
 
