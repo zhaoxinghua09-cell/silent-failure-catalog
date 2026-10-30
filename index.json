@@ -1,0 +1,479 @@
+{
+  "schema": "silent-failure-index/1",
+  "generated_from": "failures/SF-*.md",
+  "regenerate_with": "python tools/build-index.py",
+  "entry_count": 15,
+  "ids": [
+    "SF-001",
+    "SF-002",
+    "SF-003",
+    "SF-004",
+    "SF-005",
+    "SF-006",
+    "SF-007",
+    "SF-008",
+    "SF-009",
+    "SF-010",
+    "SF-011",
+    "SF-012",
+    "SF-013",
+    "SF-014",
+    "SF-015"
+  ],
+  "candidate_ids": [
+    "SF-015"
+  ],
+  "entries": [
+    {
+      "id": "SF-001",
+      "family": "A",
+      "family_name": "Vacuous Verification",
+      "name": "Zero items collected, exit 0",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "The runner executed successfully and collected nothing, which is reported as success.",
+      "detection_signal": [
+        "Run your suite with an explicitly empty selection (-k \"zzz_no_match\", --filter that matches nothing, an empty target list).",
+        "If it exits 0, you have this bug.",
+        "Separately, verify the mapping itself: assert every declared target exists before running anything."
+      ],
+      "gate_mapping": "Make an empty collection a failure, and validate the mapping before use.",
+      "required_evidence": [
+        {
+          "control": "Empty the target list / rename one target",
+          "expected": "exits non-zero with 0 targets collected or N declared targets missing"
+        },
+        {
+          "control": "Point the runner at a non-existent directory",
+          "expected": "exits non-zero, not collected 0 items + exit 0"
+        }
+      ],
+      "file": "failures/SF-001-zero-items-pass.md"
+    },
+    {
+      "id": "SF-002",
+      "family": "A",
+      "family_name": "Vacuous Verification",
+      "name": "Early return as an implicit skip",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "A guard exits the test body instead of reporting a skip — so the test appears to have passed.",
+      "detection_signal": [
+        "Grep your suite for bare return statements inside test functions, and for if not <condition> guards with no else.",
+        "Compare the reported test count against the number of test functions. Equal counts with unexpected green is the signature.",
+        "Run the suite in both environments (with and without the precondition met) and diff the skip counts."
+      ],
+      "gate_mapping": "Convert the silent exit into an explicit skip, or into an outright failure if the precondition is required.",
+      "required_evidence": [
+        {
+          "control": "Force precondition() to return False",
+          "expected": "test reports skipped (or failed if required) — never passed"
+        },
+        {
+          "control": "Delete the guarded assertion entirely",
+          "expected": "suite reports a different count / a skip; the change is visible"
+        }
+      ],
+      "file": "failures/SF-002-early-return-as-skip.md"
+    },
+    {
+      "id": "SF-003",
+      "family": "A",
+      "family_name": "Vacuous Verification",
+      "name": "Swallowed exception",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "A try/except added \"for robustness\" deletes the failure signal.",
+      "detection_signal": [
+        "Grep for except blocks whose body is only pass, continue, ..., or a log call with no counter increment.",
+        "Grep for except Exception broadly — every one is a candidate.",
+        "Compare the number of input items against the number of items actually examined, and assert equality."
+      ],
+      "gate_mapping": "Never discard. Either re-raise, or record a counted failure.",
+      "required_evidence": [
+        {
+          "control": "Pass one malformed item",
+          "expected": "the run reports it and exits non-zero"
+        },
+        {
+          "control": "Pass only malformed items",
+          "expected": "exits non-zero with \"nothing was examined\"; never 0 ok + exit 0"
+        }
+      ],
+      "file": "failures/SF-003-swallowed-exception.md"
+    },
+    {
+      "id": "SF-004",
+      "family": "A",
+      "family_name": "Vacuous Verification",
+      "name": "Sentinel value on failure",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "A function returns 0.0 / \"\" / [] when it fails, so a crash becomes indistinguishable from a bad result.",
+      "detection_signal": [
+        "Enumerate every sentinel it can return, and every legitimate value it can return.",
+        "If the two sets intersect, you have this bug.",
+        "Grep for except blocks containing return — each is a candidate."
+      ],
+      "gate_mapping": "Raise. Let the failure be a failure.",
+      "required_evidence": [
+        {
+          "control": "Pass inputs of mismatched length",
+          "expected": "raises ValueError, run aborts; no 0.0 is ever produced"
+        },
+        {
+          "control": "Pass an empty input list",
+          "expected": "raises; never reports a metric for zero records"
+        }
+      ],
+      "file": "failures/SF-004-sentinel-value.md"
+    },
+    {
+      "id": "SF-005",
+      "family": "B",
+      "family_name": "Uncounted Absence",
+      "name": "Neutral marker not counted",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "\"Expected but absent\" is reported as a neutral note, so it never increments the failure counter — and the gate prints PASS.",
+      "detection_signal": [
+        "Count the checker's output states and ask, for each, whether it can produce a non-zero exit.",
+        "Then: declare what should be present. A checker that only verifies what it can find will always pass. Add an expectation list, and treat unmet expectations as failures."
+      ],
+      "gate_mapping": "Two changes, both required.",
+      "required_evidence": [
+        {
+          "control": "Remove one required item from the source",
+          "expected": "exits non-zero, reporting that item by name"
+        },
+        {
+          "control": "Remove all required items",
+          "expected": "exits non-zero; never ✅ 0 🔴 0"
+        },
+        {
+          "control": "Restore the items",
+          "expected": "exits 0 — proving the check now discriminates"
+        }
+      ],
+      "file": "failures/SF-005-neutral-marker-not-counted.md"
+    },
+    {
+      "id": "SF-006",
+      "family": "B",
+      "family_name": "Uncounted Absence",
+      "name": "Undeclared means unchecked",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "The validator checks exactly what the registry declares, so anything the registry forgot to declare is never checked — and never missed.",
+      "detection_signal": [
+        "Reverse coverage. Enumerate what exists (list the published artifacts, the deployed services, the rows in the source of truth) and diff it against what is declared. Any existence not in the registry is unchecked.",
+        "Who owns registry completeness? If the answer is \"whoever remembers\", coverage will decay. If the answer is \"an assertion in the gate\", it will not."
+      ],
+      "gate_mapping": "Add a reverse-coverage assertion: compare the declared set against the discovered set, and treat the difference as failure in both directions.",
+      "required_evidence": [
+        {
+          "control": "Create a new artifact without declaring it",
+          "expected": "gate exits non-zero, naming it as undeclared"
+        },
+        {
+          "control": "Delete a declared item from reality",
+          "expected": "gate exits non-zero, naming it as stale"
+        },
+        {
+          "control": "Add and declare symmetrically",
+          "expected": "gate exits 0"
+        }
+      ],
+      "file": "failures/SF-006-undeclared-not-checked.md"
+    },
+    {
+      "id": "SF-007",
+      "family": "B",
+      "family_name": "Uncounted Absence",
+      "name": "Empty value is silent",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "A required field is empty, and nothing anywhere breaks — the page loads, the API responds, the reference resolves.",
+      "detection_signal": [
+        "Enumerate the fields that a retrieval system would need in order to match this record against a query — then check whether each is populated and whether anything asserts it.",
+        "Anything with populated=no, asserted=no is this bug."
+      ],
+      "gate_mapping": "Split \"required\" into two explicit classes, and assert the second one.",
+      "required_evidence": [
+        {
+          "control": "Blank a required-for-purpose field",
+          "expected": "the publish path exits non-zero, naming the field"
+        },
+        {
+          "control": "Remove the assertion, re-run",
+          "expected": "the record publishes silently — proving the assertion was doing the work"
+        }
+      ],
+      "file": "failures/SF-007-empty-value-is-silent.md"
+    },
+    {
+      "id": "SF-008",
+      "family": "C",
+      "family_name": "Wrong Evidence",
+      "name": "Loading artifact as evidence of use",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "A file written at startup proves loaded. It is being read as proof of used.",
+      "detection_signal": [
+        "For every metric you report, write down the claim and then ask: could this evidence be true while the claim is false?",
+        "If the rightmost column is non-empty, you are reading a proxy. Then find the event-level source: a log line with a stable, greppable shape that is emitted at the moment of the behaviour.",
+        "For the package case: match invocation events (tool '<name>' / id=<key>), not existence. Distinguish the sites that merely list the items (a roster printed in every request) from the sites that fire them — see SF-009."
+      ],
+      "gate_mapping": "Replace lifecycle evidence with event evidence, and state the evidence class in the report.",
+      "required_evidence": [
+        {
+          "control": "Install an item and never invoke it",
+          "expected": "usage metric stays flat (correctly not counted)"
+        },
+        {
+          "control": "Invoke an item once",
+          "expected": "usage metric increments by exactly 1"
+        }
+      ],
+      "file": "failures/SF-008-loading-artifact-as-evidence.md"
+    },
+    {
+      "id": "SF-009",
+      "family": "C",
+      "family_name": "Wrong Evidence",
+      "name": "Exposure counted as usage",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "Content is present in every request, so a search for it returns a large number — which is read as usage.",
+      "detection_signal": [
+        "Inspect one instance of a hit, not the aggregate. Read the surrounding text and identify which site produced it.",
+        "Classify the sites into listing (the item is named because it is available) and firing (the item is named because it was chosen).",
+        "Count only the firing sites. A pattern that marks the firing site (a tool-call marker, an event id, a distinct log template) is the only usable counter."
+      ],
+      "gate_mapping": "Count events at the firing site only, and make the exclusion explicit in the query.",
+      "required_evidence": [
+        {
+          "control": "Add a request that does not invoke the item",
+          "expected": "usage count unchanged (exposure rises, usage does not)"
+        },
+        {
+          "control": "Invoke the item once",
+          "expected": "usage count +1"
+        },
+        {
+          "control": "Remove the ambient roster",
+          "expected": "both counts converge — proving the gap was the inflation"
+        }
+      ],
+      "file": "failures/SF-009-exposure-counted-as-usage.md"
+    },
+    {
+      "id": "SF-010",
+      "family": "C",
+      "family_name": "Wrong Evidence",
+      "name": "Local green is not remote green",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "Every local gate passes; the published artifact is still inconsistent, because the published artifact is a different object.",
+      "detection_signal": [
+        "Is there a check that reads the live state? (Not \"is there a check for the local source of it\".)",
+        "Does it compare against a declared expectation, or only print what it finds?",
+        "Does it check the fields the platform rewrites — type, visibility, ordering, derived fields?"
+      ],
+      "gate_mapping": "One read-back check per published channel, comparing live state against a declared expectation.",
+      "required_evidence": [
+        {
+          "control": "Change an expectation in the registry so it no longer matches live",
+          "expected": "the check exits non-zero, naming the field"
+        },
+        {
+          "control": "Point it at a deliberately wrong record id",
+          "expected": "exits non-zero (not a silent no-op — see SF-001)"
+        }
+      ],
+      "file": "failures/SF-010-local-green-not-remote-green.md"
+    },
+    {
+      "id": "SF-011",
+      "family": "D",
+      "family_name": "Drifting Oracle",
+      "name": "The always-green oracle",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "An exemption clause fires on any match, so the check passes unconditionally — including on the exact input it exists to catch.",
+      "detection_signal": [
+        "Countersign test. Feed the oracle the exact input it was built to reject. If it stays green, stop here — it does not discriminate.",
+        "Bound audit. For each exemption clause, ask: is there a lower bound? an upper bound? a maximum share? An exemption with only a lower bound (\"if it matches at all, skip\") is unbounded above.",
+        "Self-test in CI. Keep the pathological input as a fixture. A rule without a failing fixture is untested."
+      ],
+      "gate_mapping": "Make the criterion proportional and bounded, and ship the counter-example as a test.",
+      "required_evidence": [
+        {
+          "control": "Feed a verbatim copy",
+          "expected": "FAIL, reporting run length and ratio"
+        },
+        {
+          "control": "Feed a genuinely original text",
+          "expected": "PASS, with a near-zero ratio"
+        },
+        {
+          "control": "Feed a text with one legitimate 20-char quote",
+          "expected": "PASS — proves the exemption still works as intended"
+        }
+      ],
+      "file": "failures/SF-011-always-green-oracle.md"
+    },
+    {
+      "id": "SF-012",
+      "family": "D",
+      "family_name": "Drifting Oracle",
+      "name": "Misattributed failure",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "The check fails — and blames the wrong cause, so the real defect is never fixed.",
+      "detection_signal": [
+        "Take the reported cause and verify it independently. If the named cause is not actually broken, the attribution is wrong — and the real cause is still unknown.",
+        "Audit every string comparison for substring/prefix semantics where exact semantics are intended. Prefer token equality, parsed values, or anchored patterns (\\b boundaries, ^...$).",
+        "Check for early return. Grep the detector for break / return inside the finding loop — each one truncates the report.",
+        "Look for a second, quieter signal. Misattribution usually means two conditions are present and only one is reported."
+      ],
+      "gate_mapping": "Make the comparison as strong as the claim, and report all findings rather than the first.",
+      "required_evidence": [
+        {
+          "control": "Introduce an exact-match violation",
+          "expected": "reported as an exact match"
+        },
+        {
+          "control": "Introduce only a substring collision (getByRole)",
+          "expected": "reported separately as a collision, not as a field usage"
+        },
+        {
+          "control": "Introduce two violations",
+          "expected": "both reported, not just the first"
+        }
+      ],
+      "file": "failures/SF-012-misattributed-failure.md"
+    },
+    {
+      "id": "SF-013",
+      "family": "E",
+      "family_name": "Process & Environment",
+      "name": "Stale copy contaminates the check",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "A pre-change backup is written inside the directory being checked, so the check reads an old copy as fresh input.",
+      "detection_signal": [
+        "Are any findings in paths that are not source? Group the report by path pattern. A cluster in .bak, _backup, ~, .orig, .tmp or a timestamped directory is this bug.",
+        "Does the count change between a clean checkout and the working tree? If yes, the difference is environmental.",
+        "Is the check's file selection explicit? If it globs a tree rather than an allow-list, it selects whatever happens to be there."
+      ],
+      "gate_mapping": "Three layers, strongest first.",
+      "required_evidence": [
+        {
+          "control": "Place a .bak file with a known violation inside the tree",
+          "expected": "gate does not report it"
+        },
+        {
+          "control": "Place the same violation in a tracked source file",
+          "expected": "gate does report it"
+        },
+        {
+          "control": "Run on a clean checkout then on the working tree",
+          "expected": "identical counts"
+        }
+      ],
+      "file": "failures/SF-013-stale-copy-contaminates-check.md"
+    },
+    {
+      "id": "SF-014",
+      "family": "E",
+      "family_name": "Process & Environment",
+      "name": "Zombie process looks alive",
+      "status": "stable",
+      "candidate": false,
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "definition": "A hung process reports no error, holds no CPU and never exits — so every liveness signal says it is fine.",
+      "detection_signal": [
+        "When did it last make progress? Not \"is it alive\" — \"when was the last output, the last heartbeat, the last state change?\"",
+        "Is there a deadline? If any job can run forever without complaint, it has no failure mode.",
+        "Are child processes reaped? Compare the expected process count against the observed count. A number that only grows is a leak."
+      ],
+      "gate_mapping": "Add positive progress signals, timeouts and reaping — and make the absence of progress a failure.",
+      "required_evidence": [
+        {
+          "control": "Make the worker hang on purpose",
+          "expected": "watchdog kills it and reports stalled, with the silence duration"
+        },
+        {
+          "control": "Run the worker 5 times in sequence",
+          "expected": "resident process count returns to baseline — no accumulation"
+        },
+        {
+          "control": "Run a healthy worker",
+          "expected": "completes normally, no false stall"
+        }
+      ],
+      "file": "failures/SF-014-zombie-process-looks-alive.md"
+    },
+    {
+      "id": "SF-015",
+      "family": "E",
+      "family_name": "Process & Environment",
+      "name": "Stale reference: citations rot when the cited state moves",
+      "status": "candidate v1.1（外审侧审阅通过带三条修改，v1.1 已按意见修订；待外审终审后转 accepted）",
+      "candidate": true,
+      "confidence": "high（三实例实取）",
+      "as_of": "2026-10-23",
+      "definition": "A document cites an external object's state (issue open/closed, version, link alive) but carries no re-check mechanism, so the citation silently inverts its meaning when the cited state changes.",
+      "detection_signal": [
+        "Does the sentence assert a state, or a fact? States use verbs like is open / is live / is current / has been submitted. Those need a check date or no assertion.",
+        "Would the sentence still be true if the cited object changed yesterday? If the document cannot answer that, it is asserting state without liability control.",
+        "Does the citation carry (a) status-at-citation, (b) a re-check cadence matched to the volatility tier (see below), (c) a fallback wording if the state flipped? Missing any one = this bug.",
+        "Was the enumeration pulled from the source at writing time, or from memory? Memory-written enumerations are suspect by default. The pull must be complete (list the whole set, not spot-check members) — instance #3 failed precisely because a spot-check of #2/#4 was presented as the full list."
+      ],
+      "gate_mapping": "Three layers, strongest first.",
+      "required_evidence": [
+        {
+          "control": "Cite a closed issue as \"open question\" (variant of instance #1)",
+          "expected": "linter flags the mismatch"
+        },
+        {
+          "control": "Cite the same issue with closure date included (fix style)",
+          "expected": "linter passes; sentence stays true after closure"
+        },
+        {
+          "control": "Enumeration written from memory (instance #3 style)",
+          "expected": "self-check question 4 triggers; enumeration re-pulled before citing"
+        }
+      ],
+      "file": "failures/SF-015-stale-reference-rot.md"
+    }
+  ]
+}

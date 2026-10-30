@@ -183,6 +183,8 @@ run "implementation mutation"     "source-level watch on the artifact under test
 run "line endings"                "the index carries no CRLF" tools/check-line-endings.py
 run "gate parity selftest"        "that gate must be able to fail too" tools/check-gate-parity.py --selftest
 run "gate parity hook-vs-ci"      "the hook and this file run the same gates" tools/check-gate-parity.py
+run "entry index"                 "index.json covers every entry · ids contiguous · index not stale" tools/check-index.py
+run "entry index selftest"        "that gate must be able to fail too" tools/check-index.py --selftest
 run "prepare selftest"            "the ordering and its limits must be able to fail" tools/prepare.py --selftest
 
 if [ "$fail" -ne 0 ]; then

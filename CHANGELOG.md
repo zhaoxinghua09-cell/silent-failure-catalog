@@ -7,6 +7,22 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
 ## [Unreleased]
 
+### Added
+
+- **`index.json` (schema `silent-failure-index/1`)** — machine-readable index of every entry:
+  `id`, `family` + `family_name`, `name`, `definition` (the One-line), `detection_signal`
+  (the Self-check steps), `gate_mapping` (the Fix's first paragraph), `required_evidence`
+  (the negative-control rows — what must be *observed* before a fix counts), plus
+  `status` / `candidate` / `confidence` / `as_of` / source `file`.
+  Generated, never hand-edited: `tools/build-index.py`.
+- **`tools/check-index.py` (gates 17–18)** — R1 schema · R2 count equals the files on disk ·
+  R3 ids contiguous `SF-001..SF-0NN` and unique · R4 `SF-015` is the only `candidate` ·
+  R5 no required field is empty (an empty field is a published gap, not a pass) ·
+  R6 the index is not stale (regenerating reproduces it byte for byte). `--selftest`
+  mutates the index nine ways: 9/9 caught, clean input quiet.
+- README: an explicit **14 (tag `v0.1.3`) vs 15 (`main`)** table, so the two counts are
+  never mixed; the Chinese section carries the same line.
+
 ## [0.1.3] - 2026-10-11
 
 Gates 9 and 10, three new hard rules, the closure of an external review round, and the clinical-delegation transfer proof.
