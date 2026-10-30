@@ -110,6 +110,22 @@ python tools/gate-lint.py --selftest      # proves the linter itself works
 
 → Full taxonomy with the shared root cause: [`docs/taxonomy.md`](docs/taxonomy.md)
 
+### Entry count — fourteen in the citable tag, fifteen on `main`. Do not mix them.
+
+| Where you are looking | Entries | What is included |
+|---|---|---|
+| Tag `v0.1.3` (the canonical citation) | **14** | `SF-001`–`SF-014` |
+| Branch `main` (catalog as it stands now) | **15** | `SF-001`–`SF-014` + `SF-015` *(candidate)* |
+
+`SF-015` — *stale reference: citations rot when the cited state moves* — was written after
+the `v0.1.3` tag, went through an external review round, was revised to `v1.1`, and is still
+a **candidate**: reviewed and revised, not yet accepted. `index.json` on `main` therefore
+lists 15 entries and marks `SF-015` as the only `candidate: true`.
+
+Cite the release as fourteen; describe the catalog on `main` as fifteen. A sentence that
+carries one number for both is the failure SF-005 describes from the other direction — a
+count that is never re-derived from the thing it counts.
+
 ## The shared root cause
 
 Every family above is the same bug at a different layer:
@@ -157,6 +173,10 @@ python tools/gate-lint.py path/to/your_gate.py
 
 # verify the catalog itself is internally consistent
 python tools/check-catalog.py
+
+# machine-readable entry index (15 entries: ids, families, signals, gates, evidence)
+python tools/build-index.py --check     # fail if index.json is stale
+python tools/check-index.py             # fail if it is incomplete or non-contiguous
 ```
 
 Both scripts are **stdlib-only** — no install, no network, Python 3.9+.
@@ -275,6 +295,10 @@ These are the only outbound and entry links in this README, by policy — the ru
 - [`docs/start-here.md`](docs/start-here.md) —— **从症状找条目**：左边写"你看到什么"，右边直给对应条目。
 - [`docs/take-the-challenge.md`](docs/take-the-challenge.md) —— **来拆我们的台**：三档难度，攻破我们自己的检测器，攻破即署名。
 - [`docs/where-to-find-us.md`](docs/where-to-find-us.md) —— **全部渠道与引用口径**（本仓唯一集中放外链的地方）。
+
+**机器可读入口**：`index.json` —— 每条含编号、家族（A–E）、名称、定义、检测信号（自查步骤）、门禁映射（修法）、所需证据（反向对照行）。生成与校验：`python tools/build-index.py` / `python tools/check-index.py --selftest`。
+
+**条数口径（不要混用）**：可引用的标签 `v0.1.3` 收 **14 条**（`SF-001`–`SF-014`）；`main` 收 **15 条**（多出 `SF-015`，仍是 **candidate**）。引用发布版说十四，描述当前 `main` 说十五。
 
 **怎么贡献最有用**：不要点赞，**开一个 issue 说出你撞见的那类静默失败**——它决定下一条写什么。
 
