@@ -241,7 +241,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"OK    index.json matches {index['entry_count']} entries")
         return 0
-    OUT.write_text(payload, encoding="utf-8")
+    # byte-explicit: this repository is `* -text`, so a platform newline translation
+    # would put CRLF into the committed blob and fail gate 13 (found by CI on the first push).
+    OUT.write_bytes(payload.encode("utf-8"))
     print(f"wrote {OUT.relative_to(ROOT)}  entries={index['entry_count']}  candidates={index['candidate_ids']}")
     return 0
 
