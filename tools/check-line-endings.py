@@ -31,6 +31,17 @@ instead of the artifact. The index is the thing a commit writes, so the index is
 what is checked. Every blob here is read through `git cat-file blob <hash>` and
 never from disk.
 
+The index alone is not enough (added 2026-10-30)
+------------------------------------------------
+The inverse shape also exists and bit this repository for real: a file was
+regenerated on disk with CRLF but not yet staged. The index still held the old
+LF blob, so an index-only scan was green while the very next `git add` would
+write CRLF into a commit. An index-only gate is blind to exactly the bytes the
+next commit will record. So after the index scan, the gate also scans the
+working-tree bytes of (a) tracked files modified but unstaged and (b) untracked
+non-ignored files -- precisely the content a following `git add` would stage.
+Those hits are reported as `worktree-unstaged` and fail the gate the same way.
+
 This is a check, not a fix
 --------------------------
 `tools/make-manifest.py` exists precisely because the bytes must not move under
@@ -134,11 +145,35 @@ def _crlf_lines(data):
     return hits
 
 
+def _unstaged_paths(cwd):
+    """Return tracked-modified-unstaged plus untracked (non-ignored) paths.
+
+    These are exactly the files whose working-tree bytes the next `git add`
+    would stage. Reading them from disk here closes the timing hole where a
+    CRLF exists only in the working tree and the index still holds a clean LF
+    blob. Paths are NUL-separated so nothing is quoted or reinterpreted.
+    """
+    paths = []
+    for args in (["diff", "--name-only", "-z"],
+                 ["ls-files", "--others", "--exclude-standard", "-z"]):
+        code, out, err = _git(args, cwd=cwd)
+        if code != 0:
+            raise RuntimeError("git %s failed (exit %d): %s"
+                               % (" ".join(args[:2]), code, err.strip()))
+        for record in out.split(b"\0"):
+            if record:
+                paths.append(record.decode("utf-8", "replace"))
+    return paths
+
+
 def scan(cwd):
     """Scan the index of the repository at `cwd`.
 
     Returns (hits, scanned) where hits is a list of (path, line_number) and
-    scanned is the number of index entries examined.
+    scanned is the number of index entries examined. Hits found in the working
+    tree of modified-unstaged / untracked files are appended with the line
+    number of their CRLF and are indistinguishable in severity: both shapes
+    would put CRLF into the next commit.
     """
     hits = []
     entries = _index_entries(cwd)
@@ -148,6 +183,16 @@ def scan(cwd):
             continue
         for number in _crlf_lines(data):
             hits.append((path, number))
+    for path in _unstaged_paths(cwd):
+        try:
+            with open(os.path.join(cwd, path), "rb") as fh:
+                data = fh.read()
+        except OSError:
+            continue
+        if _is_binary(data):
+            continue
+        for number in _crlf_lines(data):
+            hits.append((path + " (worktree-unstaged)", number))
     return hits, len(entries)
 
 
@@ -273,6 +318,25 @@ def selftest():
             failures.append(
                 "binary control: a NUL-bearing blob was NOT skipped "
                 "(exit %d, output %r)" % (code, out.strip()))
+
+        # -- unstaged control (added 2026-10-30): the shape that actually bit this
+        #    repository -- a committed LF file whose working tree was regenerated
+        #    with CRLF but not staged. The index still holds LF, so an index-only
+        #    scan is green while the next `git add` would write CRLF. The gate must
+        #    report the working-tree bytes and exit non-zero.
+        unstaged_root = os.path.join(tmp, "unstaged")
+        _build_repo(unstaged_root, "sample.txt", b"first line\nsecond line\n")
+        with open(os.path.join(unstaged_root, "sample.txt"), "wb") as fh:
+            fh.write(b"first line\r\nsecond line\r\n")
+        code, out = _run_this_tool(unstaged_root)
+        if code != 0 and "worktree-unstaged" in out:
+            print("  + unstaged control        CRLF in modified-unstaged worktree "
+                  "reported, exit %d" % code)
+        else:
+            failures.append(
+                "unstaged control: CRLF that exists only in the working tree "
+                "was NOT caught before staging (exit %d, output %r)"
+                % (code, out.strip()))
     finally:
         _rmtree(tmp)
 
@@ -283,7 +347,8 @@ def selftest():
             print("  - " + f)
         return 1
     print("SELF-TEST PASSED: CRLF caught with a non-zero exit, LF passed, "
-          "index/worktree divergence caught, binary skipped")
+          "index/worktree divergence caught, binary skipped, "
+          "unstaged worktree CRLF caught")
     return 0
 
 
