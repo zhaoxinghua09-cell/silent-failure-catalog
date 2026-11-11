@@ -1,4 +1,4 @@
-Silent failures are what the LGD Three Laws （有籍·有证·有门禁 / registered · evidenced · gated) are built to catch — portal: docs/start-here.md
+Silent failures are what the LGD Three Laws （有籍·有证·有门禁 / registered · evidenced · gated) are built to catch. **Part of the LGD ecosystem** — theory: [Lifecycle Governance Doctrine](https://doi.org/10.5281/zenodo.22456647) · portal: https://zhaoxinghua09-cell.github.io/lgd-hub/ · start here: [docs/start-here.md](docs/start-here.md)
 
 <div align="center">
 
@@ -21,6 +21,8 @@ Silent failures are what the LGD Three Laws （有籍·有证·有门禁 / regis
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23301091.svg)](https://doi.org/10.5281/zenodo.23301091)
 
 [Start here](docs/start-here.md) · [Taxonomy](docs/taxonomy.md) · [Question Map](docs/question-map.md) · [Catalog index](failures/) · [Take the challenge](docs/take-the-challenge.md) · [Contributing](CONTRIBUTING.md)
+
+**The shelf 货架** — [uibc-core, the reference implementation](https://github.com/zhaoxinghua09-cell/uibc-core) · [agent-skills, 115 runnable checks](https://github.com/zhaoxinghua09-cell/agent-skills) · [LGD terminology registry](https://doi.org/10.5281/zenodo.23385209) · [13 domain papers and the whole ecosystem](https://zhaoxinghua09-cell.github.io/lgd-hub/)
 
 `silent-failure` `false-green` `verification-gap` `ci-cd` `testing` `ai-agents` `observability` `data-quality`
 
