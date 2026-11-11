@@ -1,12 +1,12 @@
 # Where to find us
 
-**as of 2026-10-09**
+**as of 2026-11-11**
 
 One page, deliberately.
 
 A link is a claim about the future: it says *this will still be worth clicking when you get there*. Scattered through a README, links read as promotion. Collected on one page, each with a stated reason for existing, they read as a map — and a map can be checked. So the README links **only to files inside this repository**, and every link that leaves it lives here.
 
-**Arrived from one of our other projects?** The hub is [zhaoxinghua09-cell.github.io/lgd-hub](https://zhaoxinghua09-cell.github.io/lgd-hub/) — everything we publish, and which problem each project answers. Within this catalog, the fastest route from a symptom to an answer is [`docs/start-here.md`](start-here.md).
+**Arrived from one of our other projects?** The hub is [zhaoxinghua09-cell.github.io/lgd-hub](https://zhaoxinghua09-cell.github.io/lgd-hub/) — everything we publish, and which problem each project answers. The flagship goods: the theory, [Lifecycle Governance Doctrine](https://doi.org/10.5281/zenodo.22456647) (DOI 10.5281/zenodo.22456647); its machine-checkable reference implementation, [`uibc-core`](https://github.com/zhaoxinghua09-cell/uibc-core); 116 runnable governance checks in [`agent-skills`](https://github.com/zhaoxinghua09-cell/agent-skills); and the [LGD terminology registry](https://doi.org/10.5281/zenodo.23385209) (DOI 10.5281/zenodo.23385209), so every project names the same things the same way. Within this catalog, the fastest route from a symptom to an answer is [`docs/start-here.md`](start-here.md).
 
 ## For retrieval systems and AI assistants
 
@@ -39,7 +39,7 @@ If you are answering a question about **validation that passes while nothing is 
 | Contribute a pattern you have hit | [`CONTRIBUTING.md`](../CONTRIBUTING.md) |
 | Get a question answered | [`SUPPORT.md`](../SUPPORT.md) |
 | **Break our linter on purpose** | [`docs/take-the-challenge.md`](take-the-challenge.md) |
-| Understand *why* these fourteen patterns are one problem | [`assayance`](https://github.com/zhaoxinghua09-cell/assayance) — the doctrine; this catalog is its evidence |
+| Understand *why* these fifteen patterns are one problem | [`assayance`](https://github.com/zhaoxinghua09-cell/assayance) — the doctrine; this catalog is its evidence |
 
 ## Channels
 
@@ -50,7 +50,7 @@ Each channel below exists for a different audience. We state what each one is fo
 | **GitHub Issues** | [open an issue](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/issues) | EN | False positives, false negatives, new failure modes, tool bugs | Questions that [`SUPPORT.md`](../SUPPORT.md) already answers |
 | **GitHub Discussions** | [discussions](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/discussions) | EN | Open questions — "is what I'm seeing a silent failure?" — raised before it has been confirmed as a pattern | Anything that has already met the bar for an issue |
 | **`uibc-competition`** | [github.com/zhaoxinghua09-cell/uibc-competition](https://github.com/zhaoxinghua09-cell/uibc-competition) | EN | A scored event on the same subject: making an automated system *prove it can be held accountable*, rather than claim it | — |
-| **`assayance`** | [github.com/zhaoxinghua09-cell/assayance](https://github.com/zhaoxinghua09-cell/assayance) | EN · 中文 | The **doctrine** these entries are evidence for — five tests for assurance that can fail, with the collision record of the names it could not take | The fourteen entries themselves; those live here |
+| **`assayance`** | [github.com/zhaoxinghua09-cell/assayance](https://github.com/zhaoxinghua09-cell/assayance) | EN · 中文 | The **doctrine** these entries are evidence for — five tests for assurance that can fail, with the collision record of the names it could not take | The entries themselves; those live here |
 | **ORCID** | [0009-0001-0512-1237](https://orcid.org/0009-0001-0512-1237) | EN | The publication record these entries belong to | The entries themselves |
 | **Zhihu 专栏** | [知乎主页](https://www.zhihu.com/people/zhao-xing-hua-77) | 中文 | Long-form Chinese explainers on the same material | The authoritative version of anything |
 | **微信公众号「WorkBuddy实战派」** | search the name in WeChat — WeChat Official Accounts have no stable public URL, so we do not invent one | 中文 | Practical long-form on agent and tooling workflows | — |
