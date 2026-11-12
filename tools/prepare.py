@@ -336,18 +336,79 @@ def worktree_delta(repo):
 
 
 def _sh():
+    """Find a POSIX shell, and prove it runs before returning it.
+
+    Two lessons are built into this function rather than written above it.
+
+    1. `PATH` is not the whole machine. Measured on 2026-11-12: MinGit ships
+       `usr/bin/sh.exe`, `git` is on PATH, and `shutil.which("sh")` still
+       returned None -- so `prepare.py` reported "no sh on PATH" and the
+       pipeline could not run on the only machine the maintainer had. The shell
+       was there; the search was too narrow. Git knows where its own shell lives
+       (`git --exec-path`), so the search now asks Git before giving up.
+
+    2. Found is not usable. The same day, the hook's `python3` resolved to the
+       Windows Store app-execution alias, which exits 49 with no output and made
+       all eighteen gates "fail" without running. A shell that returns non-zero
+       on `exit 0` would do the same thing here, quietly, for every file. So a
+       candidate is probed with a trivial script; a candidate that cannot run it
+       is skipped by name, not silently.
+    """
+    candidates = []
     for name in ("sh", "bash"):
         found = shutil.which(name)
         if found:
-            return found
+            candidates.append(found)
+    for base in _git_prefixes():
+        for layout in (base / "usr" / "bin", base / "bin"):
+            for name in ("sh", "sh.exe", "bash", "bash.exe"):
+                candidate = layout / name
+                if candidate.exists():
+                    candidates.append(str(candidate))
+    rejected = []
+    for candidate in candidates:
+        rc, _out = _run([candidate, "-c", "exit 0"], cwd=str(REPO), timeout=60)
+        if rc == 0:
+            return candidate
+        rejected.append("%s (rc=%d on `exit 0`)" % (candidate, rc))
+    if rejected:
+        _SH_REJECTED.extend(rejected)
     return None
+
+
+_SH_REJECTED = []
+
+
+def _git_prefixes():
+    """Directories Git implies: the executable's parents and its exec-path's."""
+    out = []
+    git = shutil.which("git")
+    if git:
+        exe = Path(git).resolve()
+        out.extend([exe.parent.parent, exe.parent.parent.parent])
+    rc, text = _run(["git", "--exec-path"], cwd=str(REPO), timeout=60)
+    if rc == 0 and text.strip():
+        here = Path(text.strip().splitlines()[-1])
+        out.extend([here.parent.parent.parent, here.parent.parent.parent.parent])
+    seen, unique = set(), []
+    for path in out:
+        if str(path) not in seen:
+            seen.add(str(path))
+            unique.append(path)
+    return unique
 
 
 def verify(repo, log=None):
     log = log if log is not None else sys.stdout
     interpreter = _sh()
     if interpreter is None:
-        log.write("  [4/4] run the hook       : FAILED -- no sh on PATH\n")
+        log.write("  [4/4] run the hook       : FAILED -- no usable sh or bash\n")
+        for line in _SH_REJECTED:
+            log.write("             rejected: %s\n" % line)
+        log.write("             The hook's rule 2 applies here too: unable to run the\n"
+                  "             checks is not the same as the checks passing. Install a\n"
+                  "             POSIX shell (Git for Windows and MinGit both ship\n"
+                  "             usr/bin/sh.exe) or set it explicitly.\n")
         return False
     env = dict(os.environ)
     env[SENTINEL_ENV] = "1"

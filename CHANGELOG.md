@@ -45,6 +45,26 @@ One new failure mode, one new rule that finds it, and the first verdict moved on
   re-copying the output it changes, in the very section whose argument is "the output you see is
   the output you get". No gate could see it, which is why gate 18 exists. The drift was
   self-inflicted and is recorded as such rather than quietly corrected.
+- **The hook no longer depends on binaries it does not need.** `cd "$(dirname "$0")/.."` became
+  parameter expansion, and the failure-report indenter became a `while read` loop instead of
+  `sed`. Measured on 2026-11-12 on a bare MinGit (which ships `usr/bin/sh.exe` but puts nothing
+  on `PATH`): `dirname: command not found`, so `cd` stayed put and **all eighteen gates reported
+  their own script as "missing"** — eighteen gates failing, none of them looked for. The gate
+  list, its order and its labels are unchanged.
+- **`tools/prepare.py` finds the shell instead of requiring it on `PATH`.** `_sh()` searched
+  `shutil.which("sh"/"bash")` only; on a machine where Git was installed and working but its
+  `usr/bin` was not on `PATH`, it returned `None` and `[4/4]` printed "no sh on PATH" while a
+  usable shell sat inside the Git installation. It now also derives candidates from
+  `git --exec-path` and the `git` executable's own location, and **probes each candidate with
+  `sh -c "exit 0"` before trusting it** — a candidate that cannot run `exit 0` is named in
+  `rejected:` rather than silently dropped.
+- **The hook probes the interpreter before using it.** `command -v python3` used to be the whole
+  test. On 2026-11-12 it resolved to the Windows Store app-execution alias
+  (`...\WindowsApps\python3`), which **exits 49 and prints nothing** — every gate was therefore
+  reported FAILED with an empty body. Same shape as the two rows above, one level up: a check
+  that "found" was treated as a check that "ran". Now each candidate must execute a trivial
+  script, the first usable one wins, and rejection reasons are printed when none is usable. An
+  explicit `PYTHON` override has to pass the same probe.
 
 ### Evidence
 
