@@ -11,6 +11,15 @@ One new failure mode, one new rule that finds it, and the first verdict moved on
 
 ### Added
 
+- **What the hook needs to run** (`CONTRIBUTING.md`) and **defect 12** of
+  `docs/building-this-catalog.md`: the hook needs a POSIX shell, a Python that can run a script,
+  and **no coreutils** — with the measured evidence (`dirname: command not found` → eighteen gates
+  reported *missing*; `command -v python3` finding an interpreter-shaped thing that exits 49 with
+  no output), the two self-inflicted holes in gate 19, and the Windows specifics (`usr/bin/sh.exe`
+  without `bash.exe`; `core.hooksPath` unset makes a clone look green).
+- **`D-036`** in `docs/defect-ledger.json`: the same defect classified `SF-012` (misattributed
+  failure), escape cause `E2` — a gate existed but the hook had no dependency assertion; closed by
+  gate 19.
 - **Gate 19 — `tools/check-hook-deps.py`.** The hook must be startable, and able to report, using
   shell builtins alone. It scans `.githooks/pre-commit`, drops whole-line comments and quoted
   message text, and fails on any external binary in command position (`dirname`, `sed`, `grep`,

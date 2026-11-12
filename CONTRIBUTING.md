@@ -104,3 +104,29 @@ Allowances are **counted and printed**, never silent. A suppression that leaves 
 - Declare `confidence` (`high` / `medium` / `low`) and document known false positives in the rule's docstring.
 - Ship a sample pair in `tools/samples/bad/` and `tools/samples/good/`. `python tools/gate-lint.py --selftest` runs them; a rule whose samples fail is not merged.
 - No third-party dependencies.
+
+## What the hook needs to run
+
+`.githooks/pre-commit` runs every gate before a commit. It needs exactly three things, and **nothing else**:
+
+| needs | why | how it is checked |
+|---|---|---|
+| a POSIX shell | the hook is `#!/bin/sh`; Git supplies one on every platform | `tools/prepare.py` requires `sh` to *run* (`sh -c "exit 0"`) before it is trusted, and prints every candidate it rejected |
+| a Python that can actually run a script | every gate is a Python file | the hook probes each candidate (`python3`, `python`, or `PYTHON`) by executing a trivial script; an interpreter that exits without output is refused, not used |
+| **no coreutils** | `dirname`/`sed`/`grep` are not in a minimal shell, and a missing one makes the hook report *every gate as missing* | **gate 19**, `tools/check-hook-deps.py`: any external binary in command position fails the gate, with the line number and the builtin to use instead |
+
+**On Windows**, if Git was installed without "Git Bash" you still have a shell — MinGit ships `usr/bin/sh.exe` (there is no `bash.exe`). Two things to know:
+
+- `git commit` executes the hook itself and adds Git's `usr/bin` to the hook's `PATH`, so coreutils *would* be visible there. Do not rely on that: `tools/prepare.py` invokes the same hook without that `PATH`, and a hook that only works under git is a hook that fails in the other path.
+- `git config core.hooksPath .githooks` must be set once per clone, or the hook never runs and every commit looks green. A clone where nobody ran it looks exactly like the clone where everything passed — that is the failure shape this repository is about.
+
+Verify your environment before blaming the gates:
+
+```bash
+python tools/prepare.py --selftest        # the ordering and its limits must be able to fail
+python tools/check-hook-deps.py           # the hook needs nothing outside the shell
+python tools/check-hook-deps.py --selftest
+```
+
+If you see `fork: retry: Resource temporarily unavailable` or `WinError 1455`, that is the host running out of commit charge (page file), not a gate defect; check free commit memory before investigating the gates.
+
