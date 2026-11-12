@@ -15,7 +15,7 @@ control.
 | [The 14 entries](failures/README.md) | one file each, each with a reproduction and a negative control |
 | [Question map](docs/question-map.md) | four levels of search intent, with citable answers |
 | [Take the challenge](docs/take-the-challenge.md) | three tiers, up to *break our linter* |
-| [Building this catalog](docs/building-this-catalog.md) | the eleven defects found in our own tooling while building it |
+| [Building this catalog](docs/building-this-catalog.md) | the twelve defects found in our own tooling while building it |
 | [Where to find us](docs/where-to-find-us.md) | the single page carrying every outbound link |
 
 ## Verify a checkout yourself

@@ -162,9 +162,29 @@ check; a claim satisfied is one that now fails loudly on the day it stops being 
 
 ---
 
+### 12. A check that blamed the files for a missing tool
+
+On 2026-11-12 the hook ran on a Windows machine with Git installed and working, and reported all eighteen gates **FAILED**, without executing one:
+
+```
+.githooks/pre-commit: line 118: dirname: command not found
+pre-commit: FAIL — tools/gate-lint.py is missing. A gate that is not there is not a gate.
+```
+
+`dirname` is coreutils, and a minimal POSIX shell has none. It failed, so `cd "$(dirname "$0")/.."` stayed in the caller's directory, so every relative path missed, so every gate was reported **missing** — the one sentence that cannot be told apart from a real deletion. The line that would have explained it used `sed`, which was missing too. A second run, after the shell was fixed, reported eighteen failures with **completely empty output**: `command -v python3` had resolved to the Windows Store app-execution alias, which exits 49 and writes nothing. "Found" had been read as "usable".
+
+Both halves were fixed inside discovery and reporting, and then the property was made checkable instead of remembered: **gate 19**, `tools/check-hook-deps.py`, fails if the hook calls any external binary in command position, and prints the builtin to use instead.
+
+That gate was wrong twice before it was right, in the same way, and the controls are what caught it:
+
+- its first scanner dropped everything inside double quotes, so `dirname` inside `cd "$(dirname "$0")/.."` — the measured line — was **invisible**. A gate written for this defect would have passed it.
+- a line with unbalanced quotes was treated as string text, so one stray quote cleared a `sed`. That line now fails closed.
+
+Worth stating plainly, because it is the pattern in all twelve: the fix is not the list of replaced words, it is that a *missing tool* can no longer be reported as a *missing file*.
+
 ## What this page is for
 
-Not self-flagellation — **evidence for the general claim.** All eleven defects are of the class the catalog documents, and none of them were found by reading the code. They were found by:
+Not self-flagellation — **evidence for the general claim.** All twelve defects are of the class the catalog documents, and none of them were found by reading the code. They were found by:
 
 - running each rule against an input that must make it fail,
 - mutating the repository's state and asserting a non-zero exit,
@@ -179,7 +199,7 @@ If you take one thing from this repository, take the method rather than any sing
 
 And two corollaries that cost ten rounds of review here:
 
-> **A documented safeguard is not an implemented one.** Five of the eleven defects above involved prose that described behaviour the code did not have — including one that described a *defect* the code did not have.
+> **A documented safeguard is not an implemented one.** Five of the twelve defects above involved prose that described behaviour the code did not have — including one that described a *defect* the code did not have.
 
 > **A passing run and a correct report are two different things.** Defect 9 wrote a correct file and printed a wrong number. If a value is reported anywhere — stdout, a badge, a summary, a comment — it needs its own route to verification, because it will be read as the truth even when the artifact beside it is right.
 
