@@ -11,6 +11,15 @@ One new failure mode, one new rule that finds it, and the first verdict moved on
 
 ### Added
 
+- **Gate 19 — `tools/check-hook-deps.py`.** The hook must be startable, and able to report, using
+  shell builtins alone. It scans `.githooks/pre-commit`, drops whole-line comments and quoted
+  message text, and fails on any external binary in command position (`dirname`, `sed`, `grep`,
+  `cut`, `awk`, …), naming the line and — for the two that were measured — the builtin to use
+  instead. Seven controls: a builtin-only hook passes; `dirname` and `sed` fixtures are rejected;
+  a **comment** naming both is not rejected (the hook explains the defect by naming them); a
+  quoted message containing `sort`/`cat`/`grep` is not rejected; a missing hook file is a
+  failure; and a line with unbalanced quotes fails **closed** — the first version of this
+  scanner cleared such a line and the fixture is what caught it.
 - **`SF-016` — swallowed failure returned as the result.** The mode one step past `SF-003`/`SF-004`:
   the handler deletes the signal *and* the name the `try` body was computing is the function's
   return value, so the absence leaves the place where it could have been caught. Entry status
