@@ -102,7 +102,7 @@ python tools/gate-lint.py --selftest      # proves the linter itself works
 
 | Family | What it is | Entries |
 |---|---|---|
-| **A · Vacuous Verification** | The check runs, but has no discriminating power | [SF-001](failures/SF-001-zero-items-pass.md) · [SF-002](failures/SF-002-early-return-as-skip.md) · [SF-003](failures/SF-003-swallowed-exception.md) · [SF-004](failures/SF-004-sentinel-value.md) |
+| **A · Vacuous Verification** | The check runs, but has no discriminating power | [SF-001](failures/SF-001-zero-items-pass.md) · [SF-002](failures/SF-002-early-return-as-skip.md) · [SF-003](failures/SF-003-swallowed-exception.md) · [SF-004](failures/SF-004-sentinel-value.md) · [SF-016](failures/SF-016-swallowed-failure-returned.md) — swallowed failure returned as the result |
 | **B · Uncounted Absence** | Something required is missing, and missing does not count as failure | [SF-005](failures/SF-005-neutral-marker-not-counted.md) · [SF-006](failures/SF-006-undeclared-not-checked.md) · [SF-007](failures/SF-007-empty-value-is-silent.md) |
 | **C · Wrong Evidence** | The signal used cannot prove the conclusion drawn from it | [SF-008](failures/SF-008-loading-artifact-as-evidence.md) · [SF-009](failures/SF-009-exposure-counted-as-usage.md) · [SF-010](failures/SF-010-local-green-not-remote-green.md) |
 | **D · Drifting Oracle** | The check itself degrades — exemption, substring match, mis-attribution | [SF-011](failures/SF-011-always-green-oracle.md) · [SF-012](failures/SF-012-misattributed-failure.md) |

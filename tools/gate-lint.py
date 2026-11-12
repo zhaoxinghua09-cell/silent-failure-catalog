@@ -400,14 +400,18 @@ def r002(tree, src, path):
     "`except Exception as e: problems.append((path, repr(e)); return None`, and let the "
     "caller treat `None` as failure. Never return the value the `except` branch was "
     "supposed to produce while deleting the reason it could not. "
-    "Related entries: failures/SF-003-swallowed-exception.md, "
-    "failures/SF-004-sentinel-value.md.",
+    "Related entries: failures/SF-016-swallowed-failure-returned.md, "
+    "failures/SF-003-swallowed-exception.md, failures/SF-004-sentinel-value.md.",
     "Name-based flow, not path-based: a name assigned inside `try` and appearing in any "
     "`return` of the same function is treated as flowing, even if every return sits on a "
     "success-only path. That is why confidence is `medium` and why the finding names the "
     "variable — the claim is checkable in one read. Flow is not followed across helper "
     "functions or into an object attribute, so a value returned through an intermediate "
-    "call is not reported.",
+    "call is not reported. Two false-positive classes were measured on real trees and are "
+    "disclosed rather than tuned away: (a) the `return` sits *inside* the `try` body, so the "
+    "handler never reaches it; (b) the handler calls a helper annotated `NoReturn` that "
+    "raises, which is fail-closed rather than swallowed. A rule that guessed at callee "
+    "semantics would start hiding the failures it exists to find.",
 )
 def r007(tree, src, path):
     out = []
