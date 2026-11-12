@@ -175,6 +175,7 @@ gate-lint selftest
   ✅ bad/unchecked_empty.py     fires SFL-003
   ✅ bad/counter_unused.py      fires SFL-004
   ✅ bad/zero_items.py          fires SFL-005
+  ✅ bad/tainted_swallow.py     fires SFL-007
   ✅ good/strict_gate.py        clean
   ✅ unparseable source         fires PARSE (and the id resolves)
   ✅ rule registry              every RULES key matches its declared id
