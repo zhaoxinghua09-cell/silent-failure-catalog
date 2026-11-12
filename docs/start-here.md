@@ -34,8 +34,8 @@ Nothing matches? That is a gap in this catalog, and a gap is worth reporting —
 
 | You want | Run |
 |---|---|
+| **A verdict in about a minute, without supplying a file of your own** — five fixtures that must be caught and one that must stay silent, in a single run | `python tools/gate-lint.py --selftest` |
 | To know whether one of your own scripts can pass without checking anything | `python tools/gate-lint.py your_gate.py` |
-| To know whether `gate-lint` itself still works | `python tools/gate-lint.py --selftest` |
 | To verify you hold an unmodified copy of this catalog | `python tools/make-manifest.py --check` |
 | To see every pattern in one table | [`failures/README.md`](../failures/README.md) |
 
