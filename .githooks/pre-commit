@@ -184,6 +184,7 @@ run "line endings"                "the index carries no CRLF" tools/check-line-e
 run "gate parity selftest"        "that gate must be able to fail too" tools/check-gate-parity.py --selftest
 run "gate parity hook-vs-ci"      "the hook and this file run the same gates" tools/check-gate-parity.py
 run "prepare selftest"            "the ordering and its limits must be able to fail" tools/prepare.py --selftest
+run "quoted output"               "verbatim blocks equal the command that produced them" tools/check-quoted-output.py
 
 if [ "$fail" -ne 0 ]; then
     echo "" >&2

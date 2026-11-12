@@ -167,6 +167,7 @@ Fastest first verdict — one command, both directions, and it does not need a f
 python tools/gate-lint.py --selftest
 ```
 
+<!-- quoted-output: python tools/gate-lint.py --selftest -->
 ```
 gate-lint selftest
 ------------------
@@ -183,17 +184,18 @@ gate-lint selftest
 SELFTEST PASSED: every rule fires on its bad sample and stays quiet on its good sample.
 ```
 
-That output is verbatim, not a mock-up. `--selftest` is not a self-congratulation: it asserts **symmetry** — every fixture in `samples/bad/` that is meant to be caught must be caught, `samples/good/strict_gate.py` must stay silent, and a rule whose samples do not behave is reported as a failure of the **linter**, not of the sample. Either side failing exits `1`. Measured at 0.11 s on one laptop, stdlib only, no network.
+That output is verbatim, not a mock-up — and it is now **checked**, not merely claimed: the `<!-- quoted-output: … -->` marker above the block tells gate 18 (`tools/check-quoted-output.py`) to run that command and diff the result, so this block cannot drift again without the gate going red. `--selftest` is not a self-congratulation: it asserts **symmetry** — every fixture in `samples/bad/` that is meant to be caught must be caught, `samples/good/strict_gate.py` must stay silent, and a rule whose samples do not behave is reported as a failure of the **linter**, not of the sample. Either side failing exits `1`. Measured at 0.11 s on one laptop, stdlib only, no network.
 
 One trap, stated here rather than discovered by you: passing the fixtures directory as a path argument (`python tools/gate-lint.py tools/samples/bad`) lints **nothing**, because `samples/` is skipped by design — you get `FAIL — nothing was linted, so nothing is verified.` and exit `1`. That message is correct and it is not a bug; to see the fixtures flagged, `cd` into the directory first, which is what the reproduction below does.
 
-Example output — a **verbatim** run against the fixtures shipped in `tools/samples/bad/`, not a mock-up. Reproduce it yourself with the two commands below:
+Example output — a **verbatim** run against the fixtures shipped in `tools/samples/bad/`, not a mock-up, and checked the same way as the block above. Reproduce it yourself with the two commands below:
 
 ```bash
 cd tools/samples/bad
 python ../../gate-lint.py . --tree .
 ```
 
+<!-- quoted-output: [tools/samples/bad] python ../../gate-lint.py . --tree . -->
 ```
 counter_unused.py
   🔴 SFL-001  no-nonzero-exit              cannot fail: no exit()/raise/assert anywhere in this file
@@ -205,6 +207,11 @@ no_exit.py
 swallow.py
   🔴 SFL-001  no-nonzero-exit              cannot fail: no exit()/raise/assert anywhere in this file
   🔴 SFL-002  swallow-exception            except block only does: pass
+  🔴 SFL-007  swallowed-failure-returned   silent except leaves checked to be returned as a result
+
+tainted_swallow.py
+  🔴 SFL-002  swallow-exception            except block only does: pass
+  🔴 SFL-007  swallowed-failure-returned   silent except leaves cfg to be returned as a result
 
 unchecked_empty.py
   🟡 SFL-003  unchecked-empty              not <expr> branch in check() has no failure path — empty/false is treated as OK
@@ -214,7 +221,7 @@ zero_items.py
 
   🟡 SFL-006  no-negative-control          no negative-control sample found under . — nothing here demonstrates that any check in this tree is capable of failing
 
-8 finding(s): 4 high, 2 medium, 2 low.
+11 finding(s): 7 high, 2 medium, 2 low.
 2 low-severity finding(s) did NOT affect the exit code. Pass --strict to make them fail.
 Run with --explain for the fix and the known false positives.
 ```
