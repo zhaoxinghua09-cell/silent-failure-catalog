@@ -20,7 +20,7 @@ Silent failures are what the LGD Three Laws （有籍·有证·有门禁 / regis
 [![Catalog validation](https://img.shields.io/badge/validation-check--catalog%20--selftest-0B1F3A)](tools/check-catalog.py)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23301091.svg)](https://doi.org/10.5281/zenodo.23301091)
 
-[Start here](docs/start-here.md) · [Taxonomy](docs/taxonomy.md) · [Question Map](docs/question-map.md) · [Catalog index](failures/) · [Take the challenge](docs/take-the-challenge.md) · [Contributing](CONTRIBUTING.md)
+[Start here](docs/start-here.md) · [Where to find us](docs/where-to-find-us.md) · [Taxonomy](docs/taxonomy.md) · [Question Map](docs/question-map.md) · [Catalog index](failures/) · [Take the challenge](docs/take-the-challenge.md) · [Contributing](CONTRIBUTING.md)
 
 `silent-failure` `false-green` `verification-gap` `ci-cd` `testing` `ai-agents` `observability` `data-quality`
 
