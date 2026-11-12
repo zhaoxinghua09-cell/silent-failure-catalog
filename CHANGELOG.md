@@ -25,12 +25,26 @@ One new failure mode, one new rule that finds it, and the first verdict moved on
   --selftest` is now the first command a stranger meets, with the verbatim output, an explicit
   statement of what is asserted (symmetry, not self-congratulation), and the `samples/`-path trap
   written down instead of left to be discovered.
+- **Gate 18 — `tools/check-quoted-output.py`.** A block that says "verbatim" now carries a
+  `<!-- quoted-output: … -->` marker naming the command that produces it, and the gate runs that
+  command and diffs the block line for line. Markers may name a working directory
+  (`[tools/samples/bad] …`); the exit code is deliberately not part of the comparison, because the
+  documented sample run exits 1 on purpose. A marker with no block fails, and finding no marker
+  fails — a checker that passes because it compared nothing is the defect this repository
+  documents most often. Four controls in `--selftest`.
 
 ### Changed
 
 - **`SFL-002`'s false-positive note** now states the suppression directive it was alluding to
   (`# gate-lint: ignore SFL-002 (reason)`) and the comment-token constraint, so a reader can act
   on it without reading the linter's source.
+- **Both verbatim blocks in `README.md` re-copied from real runs.** The selftest block was one
+  line short (`bad/tainted_swallow.py fires SFL-007`) and the sample block was further off: it
+  showed `8 finding(s): 4 high` where the tool prints `11 finding(s): 7 high`, with no
+  `tainted_swallow.py` section at all. Both were one commit stale: `SFL-007` was added without
+  re-copying the output it changes, in the very section whose argument is "the output you see is
+  the output you get". No gate could see it, which is why gate 18 exists. The drift was
+  self-inflicted and is recorded as such rather than quietly corrected.
 
 ### Evidence
 
