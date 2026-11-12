@@ -222,6 +222,8 @@ run "gate parity selftest"        "that gate must be able to fail too" tools/che
 run "gate parity hook-vs-ci"      "the hook and this file run the same gates" tools/check-gate-parity.py
 run "prepare selftest"            "the ordering and its limits must be able to fail" tools/prepare.py --selftest
 run "quoted output"               "verbatim blocks equal the command that produced them" tools/check-quoted-output.py
+run "hook dependencies"           "the hook starts and reports on shell builtins alone" tools/check-hook-deps.py
+run "hook dependencies selftest"  "that gate must be able to fail too" tools/check-hook-deps.py --selftest
 
 if [ "$fail" -ne 0 ]; then
     echo "" >&2
