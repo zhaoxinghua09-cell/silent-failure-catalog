@@ -115,7 +115,30 @@
 
 set -u
 
-cd "$(dirname "$0")/.." || exit 1
+# Where the hook lives, without asking for anything outside the shell.
+# 2026-11-12: this line was `cd "$(dirname "$0")/.."`, and on a bare MinGit the
+# hook ran with no coreutils on PATH -- `dirname: command not found` -- so `cd`
+# stayed in the wrong directory and every gate reported its script as missing.
+# Eighteen gates "missing", none of them looked for. A hook that needs an
+# external binary to find itself is a hook that fails for a reason that has
+# nothing to do with the commit. Parameter expansion is a shell builtin.
+case "$0" in
+    */*) hook_dir="${0%/*}" ;;
+    *)   hook_dir="." ;;
+esac
+cd "$hook_dir/.." || exit 1
+
+# An interpreter that is *found* is not an interpreter that *works*.
+# 2026-11-12: this hook found `python3` -- the Windows Store app-execution alias
+# at ...\WindowsApps\python3 -- and ran all eighteen gates through it. That alias
+# exits 49 and prints nothing, so every gate was reported FAILED with an empty
+# body: eighteen gates failing at once, none of them run. A reader concludes the
+# repository is broken, or learns to commit with --no-verify, and rule 2's premise
+# ("a check you have to remember is a check with a silent failure mode") is back
+# in a worse form. So: probe before trusting, fall back, and say what was rejected.
+probe_py() {
+    "$1" -c 'import sys; sys.stdout.write("ok"); sys.exit(0)' >/dev/null 2>&1
+}
 
 if [ -n "${PYTHON:-}" ]; then
     py="$PYTHON"
@@ -124,13 +147,25 @@ if [ -n "${PYTHON:-}" ]; then
         echo "pre-commit: refusing to commit — an unrunnable check is not a passed check." >&2
         exit 1
     fi
+    if ! probe_py "$py"; then
+        echo "pre-commit: PYTHON is set to '$py' but it cannot run a trivial script." >&2
+        echo "pre-commit: refusing to commit — an interpreter that exits without output is not an interpreter." >&2
+        exit 1
+    fi
 else
     py=""
+    rejected=""
     for cand in python3 python; do
-        if command -v "$cand" >/dev/null 2>&1; then py="$cand"; break; fi
+        if ! command -v "$cand" >/dev/null 2>&1; then continue; fi
+        if probe_py "$cand"; then py="$cand"; break; fi
+        rejected="$rejected
+    $cand -> $(command -v "$cand") (found, but it cannot run a trivial script)"
     done
     if [ -z "$py" ]; then
-        echo "pre-commit: no Python interpreter found (looked for python3, python)." >&2
+        echo "pre-commit: no usable Python interpreter found (looked for python3, python)." >&2
+        if [ -n "$rejected" ]; then
+            echo "pre-commit: these were found but rejected:$rejected" >&2
+        fi
         echo "pre-commit: refusing to commit. Install Python, or set PYTHON=/path/to/python." >&2
         exit 1
     fi
@@ -154,7 +189,9 @@ run() {
     fi
     if ! out=$("$py" "$script" "$@" 2>&1); then
         echo "pre-commit: FAIL — $name" >&2
-        printf '%s\n' "$out" | sed 's/^/    /' >&2
+        # Indent with a builtin, not `sed`. Same reason as the `cd` above: the
+        # report of a failure must not itself fail for lack of a coreutils binary.
+        printf '%s\n' "$out" | while IFS= read -r line; do printf '    %s\n' "$line" >&2; done
         fail=1
     fi
 }
