@@ -102,7 +102,7 @@ python tools/gate-lint.py --selftest      # proves the linter itself works
 
 | Family | What it is | Entries |
 |---|---|---|
-| **A · Vacuous Verification** | The check runs, but has no discriminating power | [SF-001](failures/SF-001-zero-items-pass.md) · [SF-002](failures/SF-002-early-return-as-skip.md) · [SF-003](failures/SF-003-swallowed-exception.md) · [SF-004](failures/SF-004-sentinel-value.md) |
+| **A · Vacuous Verification** | The check runs, but has no discriminating power | [SF-001](failures/SF-001-zero-items-pass.md) · [SF-002](failures/SF-002-early-return-as-skip.md) · [SF-003](failures/SF-003-swallowed-exception.md) · [SF-004](failures/SF-004-sentinel-value.md) · [SF-016](failures/SF-016-swallowed-failure-returned.md) — swallowed failure returned as the result |
 | **B · Uncounted Absence** | Something required is missing, and missing does not count as failure | [SF-005](failures/SF-005-neutral-marker-not-counted.md) · [SF-006](failures/SF-006-undeclared-not-checked.md) · [SF-007](failures/SF-007-empty-value-is-silent.md) |
 | **C · Wrong Evidence** | The signal used cannot prove the conclusion drawn from it | [SF-008](failures/SF-008-loading-artifact-as-evidence.md) · [SF-009](failures/SF-009-exposure-counted-as-usage.md) · [SF-010](failures/SF-010-local-green-not-remote-green.md) |
 | **D · Drifting Oracle** | The check itself degrades — exemption, substring match, mis-attribution | [SF-011](failures/SF-011-always-green-oracle.md) · [SF-012](failures/SF-012-misattributed-failure.md) |
@@ -160,6 +160,31 @@ python tools/check-catalog.py
 ```
 
 Both scripts are **stdlib-only** — no install, no network, Python 3.9+.
+
+Fastest first verdict — one command, both directions, and it does not need a file of yours:
+
+```bash
+python tools/gate-lint.py --selftest
+```
+
+```
+gate-lint selftest
+------------------
+  ✅ bad/no_exit.py             fires SFL-001
+  ✅ bad/swallow.py             fires SFL-002
+  ✅ bad/unchecked_empty.py     fires SFL-003
+  ✅ bad/counter_unused.py      fires SFL-004
+  ✅ bad/zero_items.py          fires SFL-005
+  ✅ good/strict_gate.py        clean
+  ✅ unparseable source         fires PARSE (and the id resolves)
+  ✅ rule registry              every RULES key matches its declared id
+
+SELFTEST PASSED: every rule fires on its bad sample and stays quiet on its good sample.
+```
+
+That output is verbatim, not a mock-up. `--selftest` is not a self-congratulation: it asserts **symmetry** — every fixture in `samples/bad/` that is meant to be caught must be caught, `samples/good/strict_gate.py` must stay silent, and a rule whose samples do not behave is reported as a failure of the **linter**, not of the sample. Either side failing exits `1`. Measured at 0.11 s on one laptop, stdlib only, no network.
+
+One trap, stated here rather than discovered by you: passing the fixtures directory as a path argument (`python tools/gate-lint.py tools/samples/bad`) lints **nothing**, because `samples/` is skipped by design — you get `FAIL — nothing was linted, so nothing is verified.` and exit `1`. That message is correct and it is not a bug; to see the fixtures flagged, `cd` into the directory first, which is what the reproduction below does.
 
 Example output — a **verbatim** run against the fixtures shipped in `tools/samples/bad/`, not a mock-up. Reproduce it yourself with the two commands below:
 

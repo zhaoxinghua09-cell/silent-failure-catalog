@@ -372,7 +372,9 @@ def r001(tree, src, path):
     "See failures/SF-003-swallowed-exception.md.",
     "Handlers whose only statement is a log call are flagged as medium-confidence; a "
     "deliberate best-effort cleanup that is genuinely not a verification may be safe to "
-    "ignore, but say so in a comment.",
+    "ignore, but say so in a comment. To suppress a specific line, write "
+    "`# gate-lint: ignore SFL-002 (reason)` on it — the directive is honoured only inside "
+    "a real comment token, so quoting it in a docstring does not silence the rule.",
 )
 def r002(tree, src, path):
     out = []
@@ -384,6 +386,68 @@ def r002(tree, src, path):
                     Finding("SFL-002", n.lineno,
                             "except block only does: %s" % ", ".join(sorted(set(kinds))))
                 )
+    return out
+
+
+@rule(
+    "SFL-007",
+    "swallowed-failure-returned",
+    "high",
+    "medium",
+    "A silent `except` leaves a value unset, and that same name is what the enclosing "
+    "function returns — so the failure is handed to the caller as a result.",
+    "Record the failure and make the return conditional: "
+    "`except Exception as e: problems.append((path, repr(e)); return None`, and let the "
+    "caller treat `None` as failure. Never return the value the `except` branch was "
+    "supposed to produce while deleting the reason it could not. "
+    "Related entries: failures/SF-016-swallowed-failure-returned.md, "
+    "failures/SF-003-swallowed-exception.md, failures/SF-004-sentinel-value.md.",
+    "Name-based flow, not path-based: a name assigned inside `try` and appearing in any "
+    "`return` of the same function is treated as flowing, even if every return sits on a "
+    "success-only path. That is why confidence is `medium` and why the finding names the "
+    "variable — the claim is checkable in one read. Flow is not followed across helper "
+    "functions or into an object attribute, so a value returned through an intermediate "
+    "call is not reported. Two false-positive classes were measured on real trees and are "
+    "disclosed rather than tuned away: (a) the `return` sits *inside* the `try` body, so the "
+    "handler never reaches it; (b) the handler calls a helper annotated `NoReturn` that "
+    "raises, which is fail-closed rather than swallowed. A rule that guessed at callee "
+    "semantics would start hiding the failures it exists to find.",
+)
+def r007(tree, src, path):
+    out = []
+    for n in ast.walk(tree):
+        if not isinstance(n, ast.ExceptHandler):
+            continue
+        if not _silent_body_kinds(n.body):
+            continue
+        parents = getattr(n, "_parents", None) or {}
+        tri = parents.get(n)
+        if not isinstance(tri, ast.Try):
+            continue
+        assigned = set()
+        for st in tri.body:
+            for x in ast.walk(st):
+                if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Store):
+                    assigned.add(x.id)
+        if not assigned:
+            continue
+        fn = parents.get(n)
+        while fn is not None and not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            fn = parents.get(fn)
+        if fn is None:
+            continue
+        returned = set()
+        for x in ast.walk(fn):
+            if isinstance(x, ast.Return) and x.value is not None:
+                for y in ast.walk(x.value):
+                    if isinstance(y, ast.Name) and y.id in assigned:
+                        returned.add(y.id)
+        if returned:
+            out.append(
+                Finding("SFL-007", n.lineno,
+                        "silent except leaves %s to be returned as a result"
+                        % ", ".join(sorted(returned)))
+            )
     return out
 
 
@@ -630,6 +694,7 @@ def cmd_selftest() -> int:
         "bad/unchecked_empty.py": {"SFL-003"},
         "bad/counter_unused.py": {"SFL-004"},
         "bad/zero_items.py": {"SFL-005"},
+        "bad/tainted_swallow.py": {"SFL-007"},
     }
     clean = ["good/strict_gate.py"]
 

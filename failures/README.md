@@ -1,6 +1,6 @@
 # Catalog Index
 
-**15 entries** · **as of 2026-09-19** · Status legend: `stable` · `draft` · `deprecated`
+**16 entries** · **as of 2026-11-12** · Status legend: `stable` · `draft` · `deprecated`
 
 One file = one failure mode. Each entry is self-contained and safe to quote directly.
 
@@ -16,6 +16,7 @@ One file = one failure mode. Each entry is self-contained and safe to quote dire
 | [SF-002](SF-002-early-return-as-skip.md) | Early return as an implicit skip | The test body exits on a condition — invisibly | `stable` |
 | [SF-003](SF-003-swallowed-exception.md) | Swallowed exception | `try/except: pass` deletes the failure signal | `stable` |
 | [SF-004](SF-004-sentinel-value.md) | Sentinel value on failure | A crash is indistinguishable from a bad result | `stable` |
+| [SF-016](SF-016-swallowed-failure-returned.md) | Swallowed failure returned as the result | The value was never computed, and it is returned anyway | `draft` |
 
 ## B · Uncounted Absence
 

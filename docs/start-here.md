@@ -27,6 +27,7 @@ Find your symptom in the left column. The right column is the entry that answers
 | The check ran against a stale copy of the thing it was checking | [SF-013 · Stale copy contaminates the check](../failures/SF-013-stale-copy-contaminates-check.md) |
 | The process is alive and doing nothing | [SF-014 · Zombie process looks alive](../failures/SF-014-zombie-process-looks-alive.md) |
 | The citation asserts a state that later flipped | [SF-015 · Stale reference: cited state rots](../failures/SF-015-stale-reference-rot.md) |
+| The value was never computed, and it was returned anyway | [SF-016 · Swallowed failure returned as the result](../failures/SF-016-swallowed-failure-returned.md) |
 
 Nothing matches? That is a gap in this catalog, and a gap is worth reporting — see [`docs/take-the-challenge.md`](take-the-challenge.md) § Tier 1.
 
@@ -34,8 +35,8 @@ Nothing matches? That is a gap in this catalog, and a gap is worth reporting —
 
 | You want | Run |
 |---|---|
+| **A verdict in about a minute, without supplying a file of your own** — five fixtures that must be caught and one that must stay silent, in a single run | `python tools/gate-lint.py --selftest` |
 | To know whether one of your own scripts can pass without checking anything | `python tools/gate-lint.py your_gate.py` |
-| To know whether `gate-lint` itself still works | `python tools/gate-lint.py --selftest` |
 | To verify you hold an unmodified copy of this catalog | `python tools/make-manifest.py --check` |
 | To see every pattern in one table | [`failures/README.md`](../failures/README.md) |
 

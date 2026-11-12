@@ -7,6 +7,45 @@ Entries are append-only. A retired entry is marked `deprecated` and kept online.
 
 ## [Unreleased]
 
+One new failure mode, one new rule that finds it, and the first verdict moved onto page one.
+
+### Added
+
+- **`SF-016` — swallowed failure returned as the result.** The mode one step past `SF-003`/`SF-004`:
+  the handler deletes the signal *and* the name the `try` body was computing is the function's
+  return value, so the absence leaves the place where it could have been caught. Entry status
+  `draft`; the evidence section is a read list, not a defect list (see below).
+- **`SFL-007` (rule `swallowed-failure-returned`)** in `tools/gate-lint.py`: a silent handler whose
+  `try` body assigns a name that appears in any `return` of the same function. Name-based flow,
+  one-function scope, `medium` confidence, and the finding names the variable so the claim is
+  checkable in one read.
+- **`tools/samples/bad/tainted_swallow.py`** — the `SFL-007` bad sample, paired with the existing
+  `good/strict_gate.py`; `--selftest` now runs 9 checks instead of 8.
+- **`README` / `docs/start-here.md` — "fastest first verdict".** `python tools/gate-lint.py
+  --selftest` is now the first command a stranger meets, with the verbatim output, an explicit
+  statement of what is asserted (symmetry, not self-congratulation), and the `samples/`-path trap
+  written down instead of left to be discovered.
+
+### Changed
+
+- **`SFL-002`'s false-positive note** now states the suppression directive it was alluding to
+  (`# gate-lint: ignore SFL-002 (reason)`) and the comment-token constraint, so a reader can act
+  on it without reading the linter's source.
+
+### Evidence
+
+Shape-rule findings on two unmodified third-party trees (`openai-agents-python` `src/agents`, 317
+files; `mcp` `python-sdk` `src/mcp`, 128 files): **374** findings, of which `SFL-007` returned
+**13**. All 13 were read; none was a defect — 11 declared or benign-by-design, 2 false positives of
+the mechanism (a `return` inside the `try` body; a handler calling a `NoReturn` helper). Both false
+positive classes are disclosed in the rule and in `SF-016`, not tailored away. The "declared
+boundary marker" idea was measured and rejected on the same trees: only **23 of 254** `SFL-002`
+hits carry such a marker (~9%), so suppression by comment cannot be the primary noise control.
+
+### Integrity
+
+- `manifest.sha256` + `INTEGRITY.md` regenerated: 84 files, set digest `32d40ebb4fb31d5a`.
+
 ## [0.1.3] - 2026-10-11
 
 Gates 9 and 10, three new hard rules, the closure of an external review round, and the clinical-delegation transfer proof.
