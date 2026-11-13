@@ -2,7 +2,7 @@
   "catalog": "silent-failure-catalog",
   "version": "patterns-index/1.0",
   "generated_from": "failures/SF-*.md headers",
-  "count": 15,
+  "count": 16,
   "patterns": [
     {
       "id": "SF-001",
@@ -153,6 +153,16 @@
       "as_of": "2026-10-23",
       "one_line": "A document cites an external object's *state* (issue open/closed, version, link alive) but carries no re-check mechanism, so the citation silently inverts its meaning when the cited state changes.",
       "path": "failures/SF-015-stale-reference-rot.md"
+    },
+    {
+      "id": "SF-016",
+      "title": "Swallowed failure returned as the result",
+      "status": "draft",
+      "family": "A · Vacuous Verification",
+      "confidence": "medium",
+      "as_of": "2026-11-12",
+      "one_line": "The value a failed operation was supposed to produce never exists, and the enclosing function returns it anyway — so the caller receives \"the result\" without being told it was never computed.",
+      "path": "failures/SF-016-swallowed-failure-returned.md"
     }
   ]
 }
