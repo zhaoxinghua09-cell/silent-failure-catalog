@@ -46,6 +46,7 @@ The check runs, but has no discriminating power.
 - [SF-002 — Early return as an implicit skip](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-002-early-return-as-skip.md): the guard exits the test body instead of reporting a skip
 - [SF-003 — Swallowed exception](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-003-swallowed-exception.md): try/except added "for robustness" removes the failure signal
 - [SF-004 — Sentinel value on failure](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-004-sentinel-value.md): errors returned as 0.0 / "" / [] so a bug looks like a bad result
+- [SF-016 — Swallowed failure returned as the result](https://github.com/zhaoxinghua09-cell/silent-failure-catalog/blob/main/failures/SF-016-swallowed-failure-returned.md): the handler deletes the signal and the uncomputed value is the function's return value
 
 ## Family B · Uncounted Absence
 
