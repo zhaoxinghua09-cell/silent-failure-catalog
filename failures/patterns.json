@@ -1,0 +1,168 @@
+{
+  "catalog": "silent-failure-catalog",
+  "version": "patterns-index/1.0",
+  "generated_from": "failures/SF-*.md headers",
+  "count": 16,
+  "patterns": [
+    {
+      "id": "SF-001",
+      "title": "Zero items collected, exit 0",
+      "status": "stable",
+      "family": "A · Vacuous Verification",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "The runner executed successfully and collected nothing, which is reported as success.",
+      "path": "failures/SF-001-zero-items-pass.md"
+    },
+    {
+      "id": "SF-002",
+      "title": "Early return as an implicit skip",
+      "status": "stable",
+      "family": "A · Vacuous Verification",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "A guard exits the test body instead of reporting a skip — so the test appears to have passed.",
+      "path": "failures/SF-002-early-return-as-skip.md"
+    },
+    {
+      "id": "SF-003",
+      "title": "Swallowed exception",
+      "status": "stable",
+      "family": "A · Vacuous Verification",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "A `try/except` added \"for robustness\" deletes the failure signal.",
+      "path": "failures/SF-003-swallowed-exception.md"
+    },
+    {
+      "id": "SF-004",
+      "title": "Sentinel value on failure",
+      "status": "stable",
+      "family": "A · Vacuous Verification",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "A function returns `0.0` / `\"\"` / `[]` when it fails, so a crash becomes indistinguishable from a bad result.",
+      "path": "failures/SF-004-sentinel-value.md"
+    },
+    {
+      "id": "SF-005",
+      "title": "Neutral marker not counted",
+      "status": "stable",
+      "family": "B · Uncounted Absence",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "\"Expected but absent\" is reported as a neutral note, so it never increments the failure counter — and the gate prints PASS.",
+      "path": "failures/SF-005-neutral-marker-not-counted.md"
+    },
+    {
+      "id": "SF-006",
+      "title": "Undeclared means unchecked",
+      "status": "stable",
+      "family": "B · Uncounted Absence",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "The validator checks exactly what the registry declares, so anything the registry forgot to declare is never checked — and never missed.",
+      "path": "failures/SF-006-undeclared-not-checked.md"
+    },
+    {
+      "id": "SF-007",
+      "title": "Empty value is silent",
+      "status": "stable",
+      "family": "B · Uncounted Absence",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "A required field is empty, and nothing anywhere breaks — the page loads, the API responds, the reference resolves.",
+      "path": "failures/SF-007-empty-value-is-silent.md"
+    },
+    {
+      "id": "SF-008",
+      "title": "Loading artifact as evidence of use",
+      "status": "stable",
+      "family": "C · Wrong Evidence",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "A file written at startup proves *loaded*. It is being read as proof of *used*.",
+      "path": "failures/SF-008-loading-artifact-as-evidence.md"
+    },
+    {
+      "id": "SF-009",
+      "title": "Exposure counted as usage",
+      "status": "stable",
+      "family": "C · Wrong Evidence",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "Content is present in every request, so a search for it returns a large number — which is read as usage.",
+      "path": "failures/SF-009-exposure-counted-as-usage.md"
+    },
+    {
+      "id": "SF-010",
+      "title": "Local green is not remote green",
+      "status": "stable",
+      "family": "C · Wrong Evidence",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "Every local gate passes; the published artifact is still inconsistent, because the published artifact is a different object.",
+      "path": "failures/SF-010-local-green-not-remote-green.md"
+    },
+    {
+      "id": "SF-011",
+      "title": "The always-green oracle",
+      "status": "stable",
+      "family": "D · Drifting Oracle",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "An exemption clause fires on any match, so the check passes unconditionally — including on the exact input it exists to catch.",
+      "path": "failures/SF-011-always-green-oracle.md"
+    },
+    {
+      "id": "SF-012",
+      "title": "Misattributed failure",
+      "status": "stable",
+      "family": "D · Drifting Oracle",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "The check fails — and blames the wrong cause, so the real defect is never fixed.",
+      "path": "failures/SF-012-misattributed-failure.md"
+    },
+    {
+      "id": "SF-013",
+      "title": "Stale copy contaminates the check",
+      "status": "stable",
+      "family": "E · Process & Environment",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "A pre-change backup is written inside the directory being checked, so the check reads an old copy as fresh input.",
+      "path": "failures/SF-013-stale-copy-contaminates-check.md"
+    },
+    {
+      "id": "SF-014",
+      "title": "Zombie process looks alive",
+      "status": "stable",
+      "family": "E · Process & Environment",
+      "confidence": "high",
+      "as_of": "2026-09-19",
+      "one_line": "A hung process reports no error, holds no CPU and never exits — so every liveness signal says it is fine.",
+      "path": "failures/SF-014-zombie-process-looks-alive.md"
+    },
+    {
+      "id": "SF-015",
+      "title": "Stale reference: citations rot when the cited state moves",
+      "status": "candidate v1.1",
+      "family": "E · Process & Environment",
+      "confidence": "high",
+      "as_of": "2026-10-23",
+      "one_line": "A document cites an external object's *state* (issue open/closed, version, link alive) but carries no re-check mechanism, so the citation silently inverts its meaning when the cited state changes.",
+      "path": "failures/SF-015-stale-reference-rot.md"
+    },
+    {
+      "id": "SF-016",
+      "title": "Swallowed failure returned as the result",
+      "status": "draft",
+      "family": "A · Vacuous Verification",
+      "confidence": "medium",
+      "as_of": "2026-11-12",
+      "one_line": "The value a failed operation was supposed to produce never exists, and the enclosing function returns it anyway — so the caller receives \"the result\" without being told it was never computed.",
+      "path": "failures/SF-016-swallowed-failure-returned.md"
+    }
+  ]
+}
