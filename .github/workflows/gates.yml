@@ -229,3 +229,106 @@ jobs:
           cp "${RUNNER_TEMP}/pristine.md" "$target"
           python tools/verify_release_consistency.py --repo-path . --no-remote
           echo "accepted again"
+
+  no-coreutils:
+    # The reason this job exists is a defect, not a preference (docs/building-this-catalog.md
+    # item 12, docs/defect-ledger.json D-036). On 2026-11-12 the hook ran on a machine with
+    # Git installed and working, needed `dirname` to find its own directory, did not find it,
+    # and reported every gate as "missing" -- the one sentence that cannot be told apart from
+    # a real deletion. Gate 19 asserts the property, but every runner here has coreutils, so
+    # gate 19 could never go red in CI *for the reason it exists*. This job takes coreutils
+    # away and checks both directions: the hook must still start, and the gate must still
+    # reject the line that caused the defect.
+    #
+    # Nothing here changes the gate list, so gate parity is not affected: this job runs the
+    # hook and gate 19 against fixtures, it does not add a gate to the hook.
+    name: no coreutils · the hook must start, and gate 19 must still be able to say no
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+
+      - name: Build a PATH that holds an interpreter and nothing else
+        run: |
+          set -eu
+          bare="${RUNNER_TEMP}/bare"
+          rm -rf "$bare"
+          mkdir -p "$bare"
+          python_bin="$(command -v python3)"
+          ln -s "$python_bin" "$bare/python3"
+          ln -s "$python_bin" "$bare/python"
+          echo "BARE=$bare" >> "$GITHUB_ENV"
+          echo "bare PATH: $bare (holds python3 and python only)"
+
+      # The judge must be able to say no before its yes means anything. Six controls,
+      # including one that fixes its own blind spot as accepted rather than pretending.
+      - name: The judge itself must be able to fail
+        run: python tools/no_coreutils_assert.py --selftest
+
+      # The control on the control. A job that says "no coreutils" while /usr/bin is still
+      # on PATH proves nothing, and would be the assertive-but-vacuous shape this catalog
+      # is about. So the absence is measured before it is relied on.
+      - name: The environment really does lack the binaries this defect used
+        run: |
+          set -u
+          still=0
+          for c in dirname basename sed awk grep cut tr head tail wc sort uniq xargs \
+                   find mktemp date cat ln mkdir rm cp mv chmod stat realpath which; do
+            if PATH="$BARE" sh -c "command -v $c" >/dev/null 2>&1; then
+              echo "::error::$c is still reachable with PATH=$BARE — this job would be a claim, not a test"
+              still=1
+            fi
+          done
+          if [ "$still" -ne 0 ]; then exit 1; fi
+          echo "confirmed: none of those binaries is reachable"
+
+      # Direction 1 — the hook gets to its gates. It may well fail some of them on a PATH
+      # this thin (gate 6 resolves the canonical tag through git), and that is not the
+      # question here; the question is whether it fails *for the reason in the catalog*.
+      # The three sentences below are the defect, verbatim.
+      - name: The hook starts and reports, without the sentences that made it lie
+        run: |
+          set +eu
+          PYTHON= PATH="$BARE" sh .githooks/pre-commit > "${RUNNER_TEMP}/hook.out" 2>&1
+          rc=$?
+          set -eu
+          python tools/no_coreutils_assert.py hook "${RUNNER_TEMP}/hook.out" "$rc"
+
+      # Direction 2 — gate 19 goes red, in CI, on the exact line that caused the defect.
+      # Without this the gate would be "always green here", which is the family this
+      # catalog calls a decorative gate.
+      - name: Gate 19 rejects the line that caused the defect
+        run: |
+          set -eu
+          hook="${RUNNER_TEMP}/hook_with_dirname"
+          cp .githooks/pre-commit "$hook"
+          printf '\ncd "$(dirname "$0")/.." || exit 1\n' >> "$hook"
+          if python tools/check-hook-deps.py --file "$hook"; then
+            echo "::error::gate 19 accepted a hook that needs dirname to find itself"
+            exit 1
+          fi
+          echo "rejected, as required"
+
+      # Direction 3 — the gate's own scanner must not need the binaries it forbids.
+      - name: Gate 19 itself runs with no coreutils on PATH
+        run: PATH="$BARE" python3 tools/check-hook-deps.py
+
+      # Direction 4 — the second half of the defect: an interpreter that is *found* is not
+      # an interpreter that *works*. The Windows Store alias exits 49 and prints nothing,
+      # and the hook ran eighteen gates through it, reporting eighteen failures with empty
+      # bodies. A stub reproduces that exactly, and the hook must refuse before running
+      # anything rather than report the gates as failed.
+      - name: A stub interpreter is refused, not used
+        run: |
+          set +eu
+          stub="${RUNNER_TEMP}/stub49"
+          printf '#!/bin/sh\nexit 49\n' > "$stub"
+          chmod +x "$stub"
+          ln -sf "$stub" "$BARE/python3"
+          ln -sf "$stub" "$BARE/python"
+          PYTHON= PATH="$BARE" sh .githooks/pre-commit > "${RUNNER_TEMP}/stub.out" 2>&1
+          rc=$?
+          set -eu
+          python tools/no_coreutils_assert.py stub "${RUNNER_TEMP}/stub.out" "$rc"

@@ -11,6 +11,15 @@ One new failure mode, one new rule that finds it, and the first verdict moved on
 
 ### Added
 
+- **CI job `no coreutils`** (`.github/workflows/gates.yml`). Gate 19 asserts that the hook needs
+  nothing outside the shell, but every runner has coreutils, so it could never go red in CI *for
+  its own reason*. This job builds a `PATH` that holds an interpreter and nothing else, first
+  **measures** that `dirname`/`sed`/`grep`/… are genuinely unreachable (a job that claims an
+  absence without checking it is the vacuous shape this catalog documents), then asserts four
+  things: the hook still reaches its last gate and reports a verdict; gate 19 rejects a copy of
+  the hook with `cd "$(dirname "$0")/.."` appended; gate 19's own scanner runs under that bare
+  `PATH`; and a stub interpreter that exits 49 with no output is **refused**, not used to report
+  gates as failed. It adds no gate to the hook, so parity is unaffected.
 - **What the hook needs to run** (`CONTRIBUTING.md`) and **defect 12** of
   `docs/building-this-catalog.md`: the hook needs a POSIX shell, a Python that can run a script,
   and **no coreutils** — with the measured evidence (`dirname: command not found` → eighteen gates
