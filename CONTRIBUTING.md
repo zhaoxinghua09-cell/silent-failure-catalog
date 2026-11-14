@@ -113,7 +113,7 @@ Allowances are **counted and printed**, never silent. A suppression that leaves 
 |---|---|---|
 | a POSIX shell | the hook is `#!/bin/sh`; Git supplies one on every platform | `tools/prepare.py` requires `sh` to *run* (`sh -c "exit 0"`) before it is trusted, and prints every candidate it rejected |
 | a Python that can actually run a script | every gate is a Python file | the hook probes each candidate (`python3`, `python`, or `PYTHON`) by executing a trivial script; an interpreter that exits without output is refused, not used |
-| **no coreutils** | `dirname`/`sed`/`grep` are not in a minimal shell, and a missing one makes the hook report *every gate as missing* | **gate 19**, `tools/check-hook-deps.py`: any external binary in command position fails the gate, with the line number and the builtin to use instead |
+| **no coreutils** | `dirname`/`sed`/`grep` are not in a minimal shell, and a missing one makes the hook report *every gate as missing* | **gate 19**, `tools/check-hook-deps.py`: any external binary in command position fails the gate, with the line number and the builtin to use instead. The CI job `no coreutils` takes those binaries away and checks both directions: the hook must still reach its gates, and gate 19 must still reject the line that caused the defect |
 
 **On Windows**, if Git was installed without "Git Bash" you still have a shell — MinGit ships `usr/bin/sh.exe` (there is no `bash.exe`). Two things to know:
 
