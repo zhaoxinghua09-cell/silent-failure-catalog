@@ -57,8 +57,12 @@ def judge(mode, text, rc):
     if mode == "hook":
         bad = [s for s in LIES if s in text]
         if bad:
-            return False, ["the hook reported its own environment as a repository problem: "
-                           + ", ".join(repr(s) for s in bad)]
+            # Print the transcript, not only the sentence. A CI-only failure is one nobody
+            # can read back on their own machine, so the transcript *is* the finding.
+            tail = text.strip().splitlines()[-60:]
+            return False, (["the hook reported its own environment as a repository problem: "
+                            + ", ".join(repr(s) for s in bad), "transcript tail:"]
+                           + ["    " + l for l in tail])
         if not any(s in text for s in VERDICTS):
             tail = text.strip().splitlines()[-8:]
             return False, ["the hook exited (rc=%d) without reaching a verdict; it did not "
