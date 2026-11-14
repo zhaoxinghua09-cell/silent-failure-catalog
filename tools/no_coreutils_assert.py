@@ -52,10 +52,20 @@ REFUSAL = ("no usable Python interpreter found",
            "found, but it cannot run a trivial script")
 
 
+def _unindented(text):
+    """The hook's own voice: every line it prints is at column 0, and every line a failing
+    gate produced is indented four spaces by the hook's `printf` loop. That indentation is
+    the only structural difference between "the hook cannot find a binary" and "a gate
+    failed", so it is what the assertion keys on: a gate that needs git and cannot find it
+    is a gate result, not a lie about the repository."""
+    return [l for l in text.splitlines() if l[:4] != "    "]
+
+
 def judge(mode, text, rc):
     """Return (ok, lines). lines carry ::error:: annotations for the runner."""
     if mode == "hook":
-        bad = [s for s in LIES if s in text]
+        own = "\n".join(_unindented(text))
+        bad = [s for s in LIES if s in own]
         if bad:
             # Print the transcript, not only the sentence. A CI-only failure is one nobody
             # can read back on their own machine, so the transcript *is* the finding.
@@ -99,8 +109,14 @@ pre-commit: all gates passed.
 
 FAILING_HOOK = """\
 pre-commit: FAIL — release consistency
-    gate 6 needs git, and this PATH has none
+        /usr/bin/sh: line 2: git: command not found
 pre-commit: commit blocked. Fix the above, or if the manifest is stale:
+"""
+
+# The same sentence, unindented: the hook itself could not start a binary. Indentation is
+# the only structural difference, and it is the whole judgement.
+FAILING_HOOK_OWN_LIE = """\
+step-wrapper.sh: line 2: sh: command not found
 """
 
 DIRNAME_LIE = """\
@@ -134,7 +150,10 @@ pre-commit: all gates passed.
 def cmd_selftest():
     controls = [
         ("hook · a clean transcript is accepted", "hook", GOOD_HOOK, 0, 0),
-        ("hook · a hook that ran and failed some gates is accepted", "hook", FAILING_HOOK, 1, 0),
+        ("hook · a gate body that cannot find git is accepted (it is a gate result)",
+         "hook", FAILING_HOOK, 1, 0),
+        ("hook · the same sentence from the hook itself is rejected", "hook",
+         FAILING_HOOK_OWN_LIE, 1, 1),
         ("hook · the dirname lie is rejected", "hook", DIRNAME_LIE, 1, 1),
         # Stated as accepted on purpose: a transcript of empty-bodied FAIL lines cannot be
         # told apart from real failures, and this judge must not pretend otherwise. The

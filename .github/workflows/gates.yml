@@ -270,13 +270,19 @@ jobs:
       # The control on the control. A job that says "no coreutils" while /usr/bin is still
       # on PATH proves nothing, and would be the assertive-but-vacuous shape this catalog
       # is about. So the absence is measured before it is relied on.
+      #
+      # `/bin/sh`, not `sh`: the first run of this job found `sh: command not found` inside
+      # its own step, because `sh` is resolved through the very PATH we had just emptied.
+      # Worse, that made the measurement below pass vacuously -- every probe returned 127
+      # and "absence" was confirmed for all twenty-seven binaries without one of them being
+      # looked for. The harness reproduced the defect it exists to demonstrate.
       - name: The environment really does lack the binaries this defect used
         run: |
           set -u
           still=0
           for c in dirname basename sed awk grep cut tr head tail wc sort uniq xargs \
                    find mktemp date cat ln mkdir rm cp mv chmod stat realpath which; do
-            if PATH="$BARE" sh -c "command -v $c" >/dev/null 2>&1; then
+            if PATH="$BARE" /bin/sh -c "command -v $c" >/dev/null 2>&1; then
               echo "::error::$c is still reachable with PATH=$BARE — this job would be a claim, not a test"
               still=1
             fi
@@ -291,7 +297,7 @@ jobs:
       - name: The hook starts and reports, without the sentences that made it lie
         run: |
           set +eu
-          PYTHON= PATH="$BARE" sh .githooks/pre-commit > "${RUNNER_TEMP}/hook.out" 2>&1
+          PYTHON= PATH="$BARE" /bin/sh .githooks/pre-commit > "${RUNNER_TEMP}/hook.out" 2>&1
           rc=$?
           set -eu
           python tools/no_coreutils_assert.py hook "${RUNNER_TEMP}/hook.out" "$rc"
@@ -328,7 +334,7 @@ jobs:
           chmod +x "$stub"
           ln -sf "$stub" "$BARE/python3"
           ln -sf "$stub" "$BARE/python"
-          PYTHON= PATH="$BARE" sh .githooks/pre-commit > "${RUNNER_TEMP}/stub.out" 2>&1
+          PYTHON= PATH="$BARE" /bin/sh .githooks/pre-commit > "${RUNNER_TEMP}/stub.out" 2>&1
           rc=$?
           set -eu
           python tools/no_coreutils_assert.py stub "${RUNNER_TEMP}/stub.out" "$rc"
