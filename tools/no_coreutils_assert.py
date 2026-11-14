@@ -77,7 +77,13 @@ def judge(mode, text, rc):
             tail = text.strip().splitlines()[-8:]
             return False, ["the hook exited (rc=%d) without reaching a verdict; it did not "
                            "run its full list. Tail:" % rc] + ["    " + l for l in tail]
-        return True, ["the hook started, ran its list, and reported a verdict (rc=%d)" % rc]
+        # A pass that says only "it reached a verdict" hides which gates gave up on this
+        # PATH. Naming them keeps the log honest and makes the thin-PATH cost visible.
+        failed = [l.split("FAIL", 1)[1].lstrip(" —-") for l in _unindented(text)
+                  if l.startswith("pre-commit: FAIL")]
+        return True, ["the hook started, ran its list, and reported a verdict (rc=%d)" % rc,
+                      "gates that failed on this PATH (expected for some): "
+                      + ("; ".join(failed) if failed else "none")]
 
     if mode == "stub":
         missing = [s for s in REFUSAL if s not in text]
