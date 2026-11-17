@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-r"""check-line-endings.py -- gate 13: the index carries no CRLF.
+r"""check-line-endings.py -- byte hygiene of the index: no CRLF, no UTF-8 BOM.
 
 Why this gate exists
 --------------------
@@ -45,12 +45,41 @@ into its index, and requires this program to report it and exit non-zero; then i
 builds an LF repository and requires silence. Either direction failing is a
 self-test failure. That is what separates a gate from a check nobody has watched.
 
+Why the BOM is in scope (2026-10-28)
+------------------------------------
+A leading UTF-8 BOM (`EF BB BF`) is the same class of defect as CRLF under
+`* -text`: it is three bytes that change every digest, and nothing in this
+toolchain used to look at them. That was not hypothetical. An independent
+review seat measured it on this repository: a file carrying a BOM passed all
+seventeen gates, while a revision of the same file without it also passed, so
+two byte-different artifacts were equally "verified". A `grep` for
+`utf-8-sig|efbbbf|BOM` across `tools/` returned nothing -- the gate's own
+subject had never been named anywhere, which is precisely the shape this
+catalogue documents.
+
+The BOM is reported, never stripped, for the same reason CRLF is: the manifest
+signs the bytes on disk, and a gate that silently rewrites them is the
+transformation `-text` was chosen to forbid. `tools/prepare.py` normalizes line
+endings and does NOT touch a BOM -- stated plainly rather than left to be
+discovered, because the asymmetry means a BOM is fixed by hand.
+
+Only the UTF-8 BOM is checked. A UTF-16 BOM cannot reach this code path: those
+files carry NUL bytes in their first window and are skipped as binary, and
+claiming coverage that the binary skip makes unreachable would be worse than
+leaving it out.
+
+This `name` deliberately carries no gate number. It used to print "gate 13" and
+the gate list moved it to 14 without this string moving with it -- a stale
+number is a second source of truth about ordering, and the ordering already has
+one (`tools/check-gate-parity.py`).
+
 Usage
 -----
   python tools/check-line-endings.py             # scan the index of the cwd repo
   python tools/check-line-endings.py --selftest   # positive + negative controls
 
-Exit code: 0 = no CRLF in the index; 1 = at least one, or the scan could not run.
+Exit code: 0 = no CRLF and no BOM in the index; 1 = at least one, or the scan
+could not run.
 """
 import os
 import subprocess
@@ -61,6 +90,10 @@ import tempfile
 # skips UTF-16 text, whose ASCII is interleaved with NULs: reporting "CRLF" inside
 # such a file would be noise about an encoding, not about a line ending.
 SNIFF_BYTES = 8000
+
+# The UTF-8 byte-order mark. Three bytes that shift every digest in the manifest
+# without changing a single character a reader would see.
+BOM_UTF8 = b"\xef\xbb\xbf"
 
 
 def _git(args, cwd=None):
@@ -120,6 +153,15 @@ def _is_binary(data):
     return b"\0" in data[:SNIFF_BYTES]
 
 
+def _has_utf8_bom(data):
+    """True if the blob starts with a UTF-8 BOM.
+
+    Checked after the binary test, on purpose: a UTF-16 file also starts with a
+    BOM but is skipped as binary, and this gate does not claim to see it.
+    """
+    return data.startswith(BOM_UTF8)
+
+
 def _crlf_lines(data):
     """Return the 1-based line numbers whose terminator is CRLF.
 
@@ -137,37 +179,47 @@ def _crlf_lines(data):
 def scan(cwd):
     """Scan the index of the repository at `cwd`.
 
-    Returns (hits, scanned) where hits is a list of (path, line_number) and
-    scanned is the number of index entries examined.
+    Returns (crlf_hits, bom_hits, scanned): crlf_hits is a list of
+    (path, line_number), bom_hits a list of path, scanned the number of index
+    entries examined.
     """
-    hits = []
+    crlf_hits = []
+    bom_hits = []
     entries = _index_entries(cwd)
     for path, blob_hash in entries:
         data = _blob_bytes(blob_hash, cwd)
         if _is_binary(data):
             continue
+        if _has_utf8_bom(data):
+            bom_hits.append(path)
         for number in _crlf_lines(data):
-            hits.append((path, number))
-    return hits, len(entries)
+            crlf_hits.append((path, number))
+    return crlf_hits, bom_hits, len(entries)
 
 
 def _run(cwd):
     """Scan and print. Returns the process exit code."""
     try:
-        hits, scanned = scan(cwd)
+        crlf_hits, bom_hits, scanned = scan(cwd)
     except RuntimeError as exc:
-        print("gate 13 FAILED: %s" % exc)
+        print("line-endings gate FAILED: %s" % exc)
         return 1
 
-    if hits:
-        for path, number in hits:
+    if crlf_hits or bom_hits:
+        for path, number in crlf_hits:
             print("%s:%d: CRLF" % (path, number))
-        files = sorted(set(path for path, _ in hits))
-        print("gate 13 FAILED: %d CRLF line(s) across %d file(s) in the index"
-              % (len(hits), len(files)))
+        for path in bom_hits:
+            print("%s:1: UTF-8 BOM" % path)
+        parts = []
+        if crlf_hits:
+            files = sorted(set(path for path, _ in crlf_hits))
+            parts.append("%d CRLF line(s) across %d file(s)" % (len(crlf_hits), len(files)))
+        if bom_hits:
+            parts.append("%d UTF-8 BOM(s)" % len(bom_hits))
+        print("line-endings gate FAILED: %s in the index" % " and ".join(parts))
         return 1
 
-    print("OK: %d file(s) in the index, no CRLF" % scanned)
+    print("OK: %d file(s) in the index, no CRLF, no BOM" % scanned)
     return 0
 
 
@@ -273,6 +325,17 @@ def selftest():
             failures.append(
                 "binary control: a NUL-bearing blob was NOT skipped "
                 "(exit %d, output %r)" % (code, out.strip()))
+        # -- BOM control: a UTF-8 BOM is three bytes of digest drift with nothing
+        #    visible on screen, so it is reported and the exit code goes non-zero.
+        bom_root = os.path.join(tmp, "bom")
+        _build_repo(bom_root, "sample.txt", BOM_UTF8 + b"first line\nsecond line\n")
+        code, out = _run_this_tool(bom_root)
+        if code != 0 and "sample.txt:1: UTF-8 BOM" in out:
+            print("  + BOM control            UTF-8 BOM in the index reported, exit %d" % code)
+        else:
+            failures.append(
+                "BOM control: a committed UTF-8 BOM was NOT caught "
+                "(exit %d, output %r)" % (code, out.strip()))
     finally:
         _rmtree(tmp)
 
@@ -283,7 +346,7 @@ def selftest():
             print("  - " + f)
         return 1
     print("SELF-TEST PASSED: CRLF caught with a non-zero exit, LF passed, "
-          "index/worktree divergence caught, binary skipped")
+          "index/worktree divergence caught, binary skipped, UTF-8 BOM caught")
     return 0
 
 
