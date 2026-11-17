@@ -1,0 +1,34 @@
+=== PROVENANCE =====================================================
+captured      : 2026-10-19, original run (Python 3.13.16, Windows, python -X utf8)
+artifact      : evidence_gated_state_machine.py
+artifact sha  : 26ED61598E1C68AC5B3C1AF60B49D1C192AF3EEDF184B47C69BC41B8EBEF747C
+tree          : silent-failure-catalog, branch evidence-gated-state-machine
+                (the commit that carried this file is `git log --follow` on it)
+nature        : a captured transcript, not a script. Re-capture it by running
+                the two commands named in the RUN blocks, in this directory.
+note          : an independent review seat asked on 2026-10-28 which tree and
+                which digest this transcript belongs to; the answer was in
+                VERIFICATION.md but not here. It is here now.
+===================================================================
+
+=== RUN 1: evidence_gated_state_machine.py ===
+== evidence_gated_state_machine - self-check ==
+  [PASS] entity registration spine: 4 entities registered, chain verifiable
+  [PASS] evidence-gated transition (model update, evidence met): GRANTED
+  [PASS] evidence-gated transition (tool change, evidence unmet): DENIED + receipt recorded
+  [PASS] capability expansion without human authorization: DENIED
+  [PASS] capability expansion with human authorization: GRANTED (authority != capability)
+  [PASS] silent-failure detectors: population drift / expired input / path deviation all fire
+  [PASS] return-to-service: granted only through a new evidence-carrying transition
+== audit trail: 5 receipts, chain depth 5
+== RESULT: all self-checks passed (constructs behave as proposed)
+
+exit code = 0
+
+=== RUN 2: demo_tamper_check.py ===
+== negative control: tamper detection (QC-07) ==
+  [PASS] baseline chain verifies True after registration
+  [PASS] tampered version field detected: verify_chain() = False
+== RESULT: negative control passed (tampering is detected) ==
+
+exit code = 0

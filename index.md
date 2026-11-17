@@ -2,7 +2,7 @@
 
 **Validation that passes while nothing is being checked.**
 
-A catalog of fourteen named silent-failure modes across CI gates, test suites, data pipelines
+A catalog of fifteen named silent-failure modes across CI gates, test suites, data pipelines
 and AI-agent harnesses — each with a minimal reproduction, a self-check, a fix, and a negative
 control.
 
