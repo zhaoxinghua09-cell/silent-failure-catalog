@@ -40,7 +40,7 @@ jobs:
           subject-path: manifest.sha256
 
       - name: Upload attested subjects
-        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-attestation-subjects
           path: |
