@@ -249,6 +249,7 @@ Directories excluded as non-content: `.git`, `.mypy_cache`, `.pytest_cache`, `.r
 
 
 
+
 ## Archival note
 - Archived at Zenodo: DOI **10.5281/zenodo.23301091** (concept **10.5281/zenodo.23051637**), version 0.1.3, 2026-10-11.
 - Canonical pin for citations: **immutable release tag `v0.1.3`** (see README); verify you hold the exact bytes with `python tools/make-manifest.py --check`. Do not cite a raw commit hash — the tag is the stable reference. `v0.1.0` is superseded: its manifest was not regenerated in the commit that added the release-consistency gate, so the invited check fails on that tag. `v0.1.1` is superseded as well: its tree carries the deposit workflow that hard-coded `version: 0.1.0`, so a Release published for it would have archived an artefact claiming 0.1.0. `v0.1.2` is superseded in turn: it predates the clinical-delegation example. The `failures/` and `docs/` files are unchanged across all four, so entries and their `as of` dates still resolve.
