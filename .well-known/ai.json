@@ -1,7 +1,7 @@
 {
   "schema": "ai-manifest/v1",
   "repository": "zhaoxinghua09-cell/silent-failure-catalog",
-  "role": "规范/投稿仓：加 .well-known/ai.json + README 首屏窄声明",
+  "role": "Catalog repo: 15 named silent-failure modes together with a validation harness; the catalog itself is the deliverable.",
   "what_it_is": "15 named silent-failure modes - validation that passes while nothing is being checked. Each with a runnable reproduction, a fixing recipe and a negative control, plus a self-testing linter.",
   "what_it_is_not": "Not a running commercial service. Not a third-party certification, compliance finding, or regulatory approval.",
   "reproduce": "See the README section \"运行测试 / Running the tests\"; commands are verbatim and require no private network.",
